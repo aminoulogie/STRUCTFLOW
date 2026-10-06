@@ -55,6 +55,9 @@
                     <TextBlock Text="Link spacing (mm)"/><TextBox x:Name="link_spacing"/>
                 </WrapPanel>
                 <WrapPanel>
+                    <TextBlock Text="Continuous links in"/><ComboBox x:Name="link_priority" Width="330"/>
+                </WrapPanel>
+                <WrapPanel>
                     <TextBlock Text="Splice positions"/><ComboBox x:Name="splices" Width="260"/>
                 </WrapPanel>
             </StackPanel>

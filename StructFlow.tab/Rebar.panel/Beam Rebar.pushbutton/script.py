@@ -18,6 +18,9 @@ NUM_FIELDS = ["cover_top", "cover_bottom", "cover_side", "cover_end", "end_ext",
 INT_FIELDS = ["top_n", "bot_n"]
 TEXT_FIELDS = ["top_zones", "bot_zones"]
 COMBO_NUM = {"lap_factor": ["50", "60"], "stock": ["6000", "12000"]}
+PRIORITY = [("auto", "Automatic (beam that cuts / deeper beam is main)"),
+            ("horizontal", "Horizontal beams continuous, vertical beams stop"),
+            ("vertical", "Vertical beams continuous, horizontal beams stop")]
 BOOL_FIELDS = ["links_on", "link_flip", "primary", "stop_cols", "full_length"]
 
 
@@ -37,6 +40,9 @@ class BeamRebarWindow(forms.WPFWindow):
         for h in br.names_of(doc, RebarHookType):
             self.link_hook.Items.Add(h)
         self.link_hook.SelectedItem = s["link_hook"] or "(none)"
+        for key, label in PRIORITY:
+            self.link_priority.Items.Add(label)
+        self.link_priority.SelectedIndex = [k for k, _ in PRIORITY].index(s.get("link_priority", "auto"))
         for key, label in br.DISPLAY_MODES:
             self.display.Items.Add(label)
         self.display.SelectedIndex = [k for k, _ in br.DISPLAY_MODES].index(s["display"])
@@ -78,6 +84,7 @@ class BeamRebarWindow(forms.WPFWindow):
         hook = self.link_hook.SelectedItem
         s["link_hook"] = "" if hook == "(none)" else hook
         s["display"] = br.DISPLAY_MODES[self.display.SelectedIndex][0]
+        s["link_priority"] = PRIORITY[self.link_priority.SelectedIndex][0]
         for key in BOOL_FIELDS:
             s[key] = bool(getattr(self, key).IsChecked)
         if s["lap_factor"] <= 0 or s["stock"] <= 0 or s["link_spacing"] <= 0:

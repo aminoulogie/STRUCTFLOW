@@ -6,7 +6,7 @@ __title__ = "Beam\nViews"
 import os
 
 from pyrevit import forms, revit, script
-from Autodesk.Revit.DB import BuiltInCategory, SubTransaction, Transaction
+from Autodesk.Revit.DB import BuiltInCategory, SubTransaction, Transaction, ViewPlan
 
 import sf_common as common
 import sf_views as sv
@@ -19,7 +19,8 @@ NUM = ["margin", "sec_offset", "sec_depth"]
 SCALES = ["scale_elev", "scale_section"]
 TEXT = ["elev_name", "sec_name"]
 BOOLS = ["make_elev", "sec_start", "sec_mid", "sec_end", "per_span",
-         "tag_leader", "unobscure", "fine", "replace_old"]
+         "tag_leader", "unobscure", "fine", "replace_old",
+         "label_plan", "label_view", "grid_dims", "avoid_clash"]
 
 
 class ViewsWindow(forms.WPFWindow):
@@ -148,13 +149,17 @@ if beams:
         t = Transaction(doc, "StructFlow Beam Views")
         t.Start()
         letters = sv.assign_letters(doc, beams)
+        plan = revit.active_view if isinstance(revit.active_view, ViewPlan) else None
+        if s["label_plan"] and plan is None:
+            print("note: open a plan view and run again to get names next to the section marks.")
+        ctx = sv.new_context(doc, plan)
         beams.sort(key=lambda b: letters[b.Id])
         for beam in beams:
             warnings = []
             st = SubTransaction(doc)
             st.Start()
             try:
-                views = sv.build_views(doc, beam, s, look, warnings.append, letters[beam.Id])
+                views = sv.build_views(doc, beam, s, look, warnings.append, letters[beam.Id], ctx)
                 st.Commit()
                 total += len(views)
                 print("{} : {}".format(out.linkify(beam.Id),

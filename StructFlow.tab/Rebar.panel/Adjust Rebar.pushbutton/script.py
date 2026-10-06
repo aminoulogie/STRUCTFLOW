@@ -17,6 +17,10 @@ NUM = ["top_A", "top_C", "bot_A", "bot_C", "cover_top", "cover_bottom", "cover_s
        "cover_end", "lap_factor", "stock", "link_spacing"]
 INT = ["top_n", "bot_n"]
 SPLICES = [KEEP, "Reset to automatic zones"]
+PRIORITY = [("auto", "Automatic (beam that cuts / deeper beam is main)"),
+            ("horizontal", "Horizontal beams continuous, vertical beams stop"),
+            ("vertical", "Vertical beams continuous, horizontal beams stop")]
+
 
 
 class AdjustWindow(forms.WPFWindow):
@@ -33,6 +37,10 @@ class AdjustWindow(forms.WPFWindow):
         for v in (KEEP, "Yes", "No"):
             self.full_length.Items.Add(v)
         self.full_length.SelectedIndex = 0
+        self.link_priority.Items.Add(KEEP)
+        for _, label in PRIORITY:
+            self.link_priority.Items.Add(label)
+        self.link_priority.SelectedIndex = 0
         for v in SPLICES:
             self.splices.Items.Add(v)
         self.splices.SelectedIndex = 0
@@ -57,6 +65,8 @@ class AdjustWindow(forms.WPFWindow):
                 ch[key] = getattr(self, key).SelectedItem
         if self.full_length.SelectedItem != KEEP:
             ch["full_length"] = self.full_length.SelectedItem == "Yes"
+        if self.link_priority.SelectedIndex > 0:
+            ch["link_priority"] = PRIORITY[self.link_priority.SelectedIndex - 1][0]
         if self.splices.SelectedItem != KEEP:
             ch["top_splices"] = ch["bot_splices"] = None
         return ch

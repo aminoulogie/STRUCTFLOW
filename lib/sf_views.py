@@ -9,7 +9,8 @@ from System.Collections.Generic import List
 from Autodesk.Revit.DB import (
     BoundingBoxXYZ, BuiltInCategory, BuiltInParameter, ElementId,
     FamilySymbol, FilteredElementCollector, IndependentTag, Reference,
-    TagOrientation, Transform, View, ViewDetailLevel, ViewFamily,
+    TagOrientation, Transform, View, TextNote, ElementTypeGroup,
+    Grid, Line, ReferenceArray, ViewDetailLevel, ViewFamily,
     ViewFamilyType, ViewSection, ViewType, XYZ, GeometryInstance, Options,
     SubTransaction,
 )
@@ -30,6 +31,7 @@ DEFAULTS = {
     "margin": 300.0,
     "beam_tag": "", "bar_tag": "", "link_tag": "", "tag_leader": True,
     "unobscure": True, "fine": True, "replace_old": True,
+    "label_plan": True, "label_view": True, "grid_dims": True, "avoid_clash": True,
 }
 
 
@@ -147,8 +149,14 @@ def assign_letters(doc, beams):
     return out
 
 
+_NOTE_MARK = "SF_AUTO_NOTE:"
+
+
 def delete_old_views(doc, beam):
-    ids = _sf_views(doc).get(beam.UniqueId, ["", []])[1]
+    ids = list(_sf_views(doc).get(beam.UniqueId, ["", []])[1])
+    key = _NOTE_MARK + beam.UniqueId
+    ids += [n.Id for n in FilteredElementCollector(doc).OfClass(TextNote)
+            if br._get_data(n) == key]
     if ids:
         doc.Delete(List[ElementId](ids))
     return len(ids)
@@ -197,7 +205,8 @@ def _fmt(pattern, beam, L, letter="", n=0):
 
 def section_positions(doc, beam, fr, s, warn):
     if s["per_span"]:
-        bj, cj = br.junctions(doc, beam, fr, warn)
+        stored = br.load_beam_settings(beam)
+        bj, cj = br.junctions(doc, beam, fr, warn, stored["link_priority"] if stored else "auto")
         spans = br.complement(fr.u0, fr.u1, br.merged(bj + cj))
     else:
         spans = [(fr.u0, fr.u1)]
@@ -229,7 +238,11 @@ def _rebars(doc, beam):
         if bb is None:
             continue
         us = [fr.u(bb.Min), fr.u(bb.Max)]
-        out.append((r, is_link, min(us), max(us), (bb.Min.Z + bb.Max.Z) / 2.0))
+        wc = (bb.Min.Z + bb.Max.Z) / 2.0
+        layer = br.rebar_layer(r)
+        if layer in ("top", "bot"):  # legs make the box centre useless
+            wc = fr.w1 if layer == "top" else fr.w0
+        out.append((r, is_link, min(us), max(us), wc))
     return fr, out
 
 
@@ -276,7 +289,7 @@ def _tag(doc, view, el, sym, pt, leader, warn):
             sym.Category.Name if sym.Category else "?", br._err(err)))
 
 
-def build_views(doc, beam, s, look, warn, L="A"):
+def build_views(doc, beam, s, look, warn, L="A", ctx=None):
     """look: dict of resolved elements {vft, t_elev, t_sec, beam_tag, bar_tag, link_tag}.
     Returns list of created views."""
     if s["replace_old"]:
@@ -286,15 +299,24 @@ def build_views(doc, beam, s, look, warn, L="A"):
     half_h = (fr.w1 - fr.w0) / 2.0 + s["margin"] * MM
     views = []
 
+    ctx = ctx or new_context(doc, None)
+    um = (fr.u0 + fr.u1) / 2.0
+    base = s["margin"] * MM
+
     if s["make_elev"]:
-        um = (fr.u0 + fr.u1) / 2.0
         sc = int(s["scale_elev"])
+        half_l = (fr.u1 - fr.u0) / 2.0
+        # long-section line: heads at both beam ends, on the beam centreline
+        m = _fit(ctx, s, base, lambda m: [fr.pt(um - half_l - m, vm, 0), fr.pt(um + half_l + m, vm, 0)])
         v = make_section(doc, beam, look["vft"], fr.pt(um, vm, wm), fr.X, -fr.Y,
-                         (fr.u1 - fr.u0) / 2.0 + s["margin"] * MM, half_h,
-                         (fr.v1 - fr.v0) / 2.0 + 50 * MM,
+                         half_l + m, half_h, (fr.v1 - fr.v0) / 2.0 + 50 * MM,
                          _fmt(s["elev_name"], beam, L), sc, look["t_elev"], s["fine"], L)
         paper = lambda mm: mm * sc * MM
         doc.Regenerate()
+        _label(doc, beam, ctx, s, v, fr.pt(um + half_l + m, vm, 0), fr.X,
+               fr.pt(um, vm, fr.w0 - paper(30)), warn)
+        if s["grid_dims"]:
+            _grid_dims(doc, v, fr, vm, fr.w1 + paper(25), half_l + m, warn)
         _tag(doc, v, beam, look["beam_tag"], fr.pt(um, vm, fr.w1 + paper(12)), False, warn)
         n_top = n_bot = 0
         for r, is_link, a, b, wc in rebars:
@@ -315,17 +337,21 @@ def build_views(doc, beam, s, look, warn, L="A"):
 
     sc = int(s["scale_section"])
     paper = lambda mm: mm * sc * MM
-    half_w = (fr.v1 - fr.v0) / 2.0 + s["margin"] * MM
+    half_b = (fr.v1 - fr.v0) / 2.0
     # looking from the beam start toward its end
     bz = -fr.X
     bx = XYZ.BasisZ.CrossProduct(bz)
-    side = fr.v1 + paper(15)
     for i, u in enumerate(section_positions(doc, beam, fr, s, warn)):
         letter = chr(ord("A") + i) if i < 26 else str(i + 1)
-        v = make_section(doc, beam, look["vft"], fr.pt(u, vm, wm), bx, bz, half_w, half_h,
+        # cross-section line: heads on both sides of the beam
+        m = _fit(ctx, s, base, lambda m: [fr.pt(u, vm - half_b - m, 0), fr.pt(u, vm + half_b + m, 0)])
+        v = make_section(doc, beam, look["vft"], fr.pt(u, vm, wm), bx, bz, half_b + m, half_h,
                          s["sec_depth"] * MM, _fmt(s["sec_name"], beam, L, letter, i + 1),
                          sc, look["t_sec"], s["fine"], L)
         doc.Regenerate()
+        _label(doc, beam, ctx, s, v, fr.pt(u, vm + half_b + m, 0), fr.Y,
+               fr.pt(u, vm, fr.w0 - paper(25)), warn)
+        side = fr.v1 + paper(15)
         k = 0
         for r, is_link, a, b, wc in rebars:
             if s["unobscure"]:
@@ -341,3 +367,77 @@ def build_views(doc, beam, s, look, warn, L="A"):
                 _tag(doc, v, r, look["bar_tag"], fr.pt(u, side, z), s["tag_leader"], warn)
         views.append(v)
     return views
+
+
+# ------------------------------------------------- plan markers and labels
+def new_context(doc, plan):
+    """Shared state for one run: where section heads already sit in plan."""
+    scale = plan.Scale if plan is not None else 100
+    return {
+        "plan": plan,
+        "markers": [],
+        "clear": 12 * scale * MM,          # 12 mm on paper between heads
+        "paper": lambda mm: mm * scale * MM,
+        "note_type": doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType),
+    }
+
+
+def _fit(ctx, s, base, heads):
+    """Smallest crop margin >= base whose section heads keep clear of all
+    heads placed so far. Only the white space around the view changes."""
+    flat = lambda p: (p.X, p.Y)
+    chosen = base
+    if s["avoid_clash"]:
+        for k in range(16):
+            m = base + k * ctx["clear"] * 0.5
+            pts = [flat(p) for p in heads(m)]
+            if all((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 >= ctx["clear"] ** 2
+                   for a in pts for b in ctx["markers"]):
+                chosen = m
+                break
+    ctx["markers"].extend(flat(p) for p in heads(chosen))
+    return chosen
+
+
+def _label(doc, beam, ctx, s, view, head, outward, in_view_pt, warn):
+    """View name next to its section head in the plan, and as a title in the view."""
+    try:
+        if s["label_plan"] and ctx["plan"] is not None:
+            plan = ctx["plan"]
+            pt = head + outward * ctx["paper"](6)
+            z = plan.GenLevel.Elevation if plan.GenLevel is not None else 0.0
+            n = TextNote.Create(doc, plan.Id, XYZ(pt.X, pt.Y, z), view.Name, ctx["note_type"])
+            br._set_data(n, _NOTE_MARK + beam.UniqueId)
+            ctx["markers"].append((pt.X, pt.Y))
+        if s["label_view"]:
+            TextNote.Create(doc, view.Id, in_view_pt, view.Name, ctx["note_type"])
+    except Exception as ex:
+        warn("could not add the name label for '%s': %s" % (view.Name, br._err(ex)))
+
+
+def _grid_dims(doc, view, fr, vm, w, half_len, warn):
+    """Dimension string between the grids that cross this long section."""
+    um = (fr.u0 + fr.u1) / 2.0
+    hits = []
+    for g in FilteredElementCollector(doc).OfClass(Grid):
+        c = g.Curve
+        if not isinstance(c, Line):
+            continue
+        p, d = c.GetEndPoint(0), c.Direction
+        den = fr.X.X * d.Y - fr.X.Y * d.X
+        if abs(den) < 1e-6:
+            continue  # parallel to the beam
+        t = ((p.X - fr.o.X) * d.Y - (p.Y - fr.o.Y) * d.X) / den
+        if um - half_len <= t <= um + half_len:
+            hits.append((t, g))
+    if len(hits) < 2:
+        return
+    hits.sort(key=lambda h: h[0])
+    refs = ReferenceArray()
+    for _, g in hits:
+        refs.Append(Reference(g))
+    line = Line.CreateBound(fr.pt(hits[0][0], vm, w), fr.pt(hits[-1][0], vm, w))
+    try:
+        doc.Create.NewDimension(view, line, refs)
+    except Exception as ex:
+        warn("could not dimension grids in '%s': %s" % (view.Name, br._err(ex)))

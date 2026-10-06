@@ -76,6 +76,9 @@
                     <CheckBox x:Name="link_flip" Content="Flip hooks"/>
                 </WrapPanel>
                 <WrapPanel>
+                    <TextBlock Text="Continuous links in"/><ComboBox x:Name="link_priority" Width="330"/>
+                </WrapPanel>
+                <WrapPanel>
                     <CheckBox x:Name="primary" Content="Force links through all beam junctions"
                               ToolTip="Normally automatic: links stop where a MAIN beam crosses (the beam that cuts this one, or the deeper one) and run through where this beam is the main one."/>
                     <CheckBox x:Name="stop_cols" Content="Stop links at columns"/>

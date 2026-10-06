@@ -39,7 +39,12 @@ def paint(el, color, fill):
 beams = list(FilteredElementCollector(doc, view.Id)
              .OfCategory(BuiltInCategory.OST_StructuralFraming)
              .WhereElementIsNotElementType())
-choice = forms.CommandSwitchWindow.show(["Colour beams", "Clear colours"],
+PREVIEW = {
+    "Preview: horizontal beams continuous": "horizontal",
+    "Preview: vertical beams continuous": "vertical",
+}
+choice = forms.CommandSwitchWindow.show(["Colour beams (each beam's settings)"] + sorted(PREVIEW)
+                                        + ["Clear colours"],
                                         message="{} beams in this view".format(len(beams)))
 if choice:
     fill = solid_fill()
@@ -53,10 +58,12 @@ if choice:
         for b in beams:
             label = out.linkify(b.Id)
             try:
-                s = br.load_beam_settings(b) or br.DEFAULTS
+                s = dict(br.load_beam_settings(b) or br.DEFAULTS)
+                if choice in PREVIEW:
+                    s["link_priority"], s["primary"] = PREVIEW[choice], False
                 fr = br.BeamFrame(b)
                 warnings = []
-                bj, cj = br.junctions(doc, b, fr, warnings.append)
+                bj, cj = br.junctions(doc, b, fr, warnings.append, s.get("link_priority", "auto"))
                 stops = []
                 if not s["primary"]:
                     stops.extend(bj)

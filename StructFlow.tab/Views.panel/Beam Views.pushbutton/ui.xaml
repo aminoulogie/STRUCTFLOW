@@ -76,6 +76,21 @@
             </StackPanel>
         </GroupBox>
 
+        <GroupBox Header="Labels and layout">
+            <StackPanel>
+                <WrapPanel>
+                    <CheckBox x:Name="label_plan" Content="Write view names next to the section marks in the plan (run from a plan view)"/>
+                </WrapPanel>
+                <WrapPanel>
+                    <CheckBox x:Name="label_view" Content="Write the name inside each section view"/>
+                    <CheckBox x:Name="grid_dims" Content="Dimension between grids in long sections"/>
+                </WrapPanel>
+                <WrapPanel>
+                    <CheckBox x:Name="avoid_clash" Content="Keep section marks from colliding (widens the view's white margin only)"/>
+                </WrapPanel>
+            </StackPanel>
+        </GroupBox>
+
         <CheckBox x:Name="replace_old" Content="Replace views StructFlow made before for these beams"/>
         <TextBlock Foreground="Gray" TextWrapping="Wrap" Margin="0,2,0,8"
                    Text="If a view template controls scale or detail level, the template wins."/>

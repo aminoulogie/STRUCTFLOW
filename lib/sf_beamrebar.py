@@ -50,6 +50,8 @@ DEFAULTS = {
     "link_flip": False, "primary": False, "stop_cols": True,
     "display": "FirstMidLast",
     "full_length": False,
+    # which beams keep continuous links at crossings: auto / horizontal / vertical
+    "link_priority": "auto",
     # manual splice centres, mm from beam start face (None = automatic)
     "top_splices": None, "bot_splices": None,
 }
@@ -260,7 +262,19 @@ def _other_is_main(beam_solids, other, fr, a, b, warn):
     return True
 
 
-def junctions(doc, beam, fr, warn):
+def is_horizontal(vec):
+    """Runs left-right on the plan (model X) rather than up-down (model Y)."""
+    return abs(vec.X) >= abs(vec.Y)
+
+
+def _direction(el):
+    crv = getattr(el.Location, "Curve", None)
+    if isinstance(crv, Line):
+        return crv.Direction
+    return None
+
+
+def junctions(doc, beam, fr, warn, priority="auto"):
     """Intervals along u where a crossing MAIN beam or a column passes
     through this beam. Secondary beams that frame into or cross this one
     are ignored (this beam is the main one there).
@@ -297,8 +311,17 @@ def junctions(doc, beam, fr, warn):
             continue
         if is_category(el, BuiltInCategory.OST_StructuralColumns):
             cols.append((a, b))
-        elif _other_is_main(beam_solids, el, fr, a, b, warn):
-            beams.append((a, b))
+        else:
+            other_dir = _direction(el)
+            if priority in ("horizontal", "vertical") and other_dir is not None:
+                want_h = priority == "horizontal"
+                if is_horizontal(fr.X) == want_h:
+                    continue  # this beam is the chosen main direction
+                if is_horizontal(other_dir) == want_h:
+                    beams.append((a, b))
+                    continue
+            if _other_is_main(beam_solids, el, fr, a, b, warn):
+                beams.append((a, b))
     return merged(beams), merged(cols)
 
 
@@ -647,7 +670,7 @@ def build(doc, beam, s, view=None):
     if not RebarHostData.IsValidHost(beam):
         raise ValueError("not a valid rebar host (is its structural material concrete?)")
     fr = BeamFrame(beam)
-    beam_j, col_j = junctions(doc, beam, fr, warn)
+    beam_j, col_j = junctions(doc, beam, fr, warn, s.get("link_priority", "auto"))
     supports = merged(beam_j + col_j)
 
     deleted = delete_auto_rebar(doc, beam)

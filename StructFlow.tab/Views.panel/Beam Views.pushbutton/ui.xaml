@@ -59,7 +59,7 @@
                 <WrapPanel>
                     <TextBlock Text="Name"/><TextBox x:Name="sec_name" Width="300"/>
                 </WrapPanel>
-                <TextBlock Foreground="Gray" Text="Name codes: {mark} beam mark, {type} beam type, {letter} A, B, C..., {n} 1, 2, 3..."/>
+                <TextBlock Foreground="Gray" TextWrapping="Wrap" Text="Name codes: {L} beam letter (A, B, C... one per beam, kept on re-run), {n} section number 1, 2, 3 in that beam, {mark} beam mark, {type} beam type. Example: long section {L}-{L} gives A-A; cross section {L}{n}-{L}{n} gives A1-A1, A2-A2."/>
             </StackPanel>
         </GroupBox>
 

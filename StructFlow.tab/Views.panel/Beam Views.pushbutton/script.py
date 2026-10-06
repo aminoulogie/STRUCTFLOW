@@ -147,12 +147,14 @@ if beams:
         total = 0
         t = Transaction(doc, "StructFlow Beam Views")
         t.Start()
+        letters = sv.assign_letters(doc, beams)
+        beams.sort(key=lambda b: letters[b.Id])
         for beam in beams:
             warnings = []
             st = SubTransaction(doc)
             st.Start()
             try:
-                views = sv.build_views(doc, beam, s, look, warnings.append)
+                views = sv.build_views(doc, beam, s, look, warnings.append, letters[beam.Id])
                 st.Commit()
                 total += len(views)
                 print("{} : {}".format(out.linkify(beam.Id),

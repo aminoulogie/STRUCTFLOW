@@ -28,4 +28,4 @@ All lengths in the dialogs are millimetres.
 
 ## Status
 
-Early version. Rebar creation is still being debugged on Revit 2027.
+Early version, tested on Revit 2027. Rebar tagging in generated views is still being debugged.

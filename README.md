@@ -13,14 +13,16 @@ git clone https://github.com/aminoulogie/STRUCTFLOW.git "%APPDATA%\pyRevit\Exten
 ## Tools
 
 **Rebar panel**
-- **Beam Rebar**: top / bottom bars (BS 8666 shapes 00, 11, 21) with covers, A/C legs, laps at 50d/60d in automatic or client-given splice zones, supplier stock length, and links (shape 51) that stop at main beams and columns.
+- **Beam Rebar**: top / bottom bars (BS 8666 shapes 00, 11, 21) with covers, A/C legs, optional side-to-side bars through the end supports, laps at 50d/60d in automatic or client-given splice zones, supplier stock length, and links (shape 51) that stop at main beams and columns.
+- **Adjust Rebar**: change A / C legs, bar counts, bar types, covers, laps, stock, link spacing or "side to side" on beams that already have bars; empty fields keep each beam's value.
+- **Move Splice**: pick a bar by its lap and click the new position; the lap stays exactly lap factor x d and the position is remembered by Rebuild.
 - **Rebuild Rebar**: regenerates the bars from the settings stored on each beam (after moving or resizing beams).
 - **Link Display**: show all / first-middle-last / 3 in the middle in the active view.
 - **Link Map**: colours beams in the active view: green = links non-stop, orange = links stop at junctions.
 - **Diagnose**: tests every rebar creation method on one beam and reports what Revit accepts (changes nothing).
 
 **Views panel**
-- **Beam Views**: long section + cross sections (start / mid / end of each span) with chosen section type, view templates, scales and tags. Setups can be saved per client.
+- **Beam Views**: long section + cross sections (start / mid / end of each span) with chosen section type, view templates, scales and tags. Names like A-A, B-B for long sections and A1-A1, A2-A2 for cross sections. Setups can be saved per client.
 
 All lengths in the dialogs are millimetres.
 

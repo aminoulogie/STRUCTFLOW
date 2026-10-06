@@ -59,6 +59,10 @@ def delete_preset(name):
 def preset(name):
     s = dict(DEFAULTS)
     s.update(load_presets().get(name, {}))
+    # setups saved before the {L} code existed get the A-A / A1-A1 scheme
+    for key in ("elev_name", "sec_name"):
+        if "{L}" not in s[key]:
+            s[key] = DEFAULTS[key]
     return s
 
 
@@ -265,7 +269,11 @@ def _tag(doc, view, el, sym, pt, leader, warn):
         except Exception as ex:
             err = ex
             st.RollBack()
-    warn("could not tag %s in '%s': %s" % (el.Id, view.Name, br._err(err)))
+    visible = el.Id in [e.Id for e in FilteredElementCollector(doc, view.Id)
+                        .OfCategoryId(el.Category.Id)]
+    warn("could not tag %s in '%s' (visible in view: %s, %d bar refs tried, tag type '%s' [%s]): %s"
+         % (el.Id, view.Name, visible, len(_bar_references(el, view)), br.ename(sym),
+            sym.Category.Name if sym.Category else "?", br._err(err)))
 
 
 def build_views(doc, beam, s, look, warn, L="A"):
@@ -286,6 +294,7 @@ def build_views(doc, beam, s, look, warn, L="A"):
                          (fr.v1 - fr.v0) / 2.0 + 50 * MM,
                          _fmt(s["elev_name"], beam, L), sc, look["t_elev"], s["fine"], L)
         paper = lambda mm: mm * sc * MM
+        doc.Regenerate()
         _tag(doc, v, beam, look["beam_tag"], fr.pt(um, vm, fr.w1 + paper(12)), False, warn)
         n_top = n_bot = 0
         for r, is_link, a, b, wc in rebars:
@@ -316,6 +325,7 @@ def build_views(doc, beam, s, look, warn, L="A"):
         v = make_section(doc, beam, look["vft"], fr.pt(u, vm, wm), bx, bz, half_w, half_h,
                          s["sec_depth"] * MM, _fmt(s["sec_name"], beam, L, letter, i + 1),
                          sc, look["t_sec"], s["fine"], L)
+        doc.Regenerate()
         k = 0
         for r, is_link, a, b, wc in rebars:
             if s["unobscure"]:

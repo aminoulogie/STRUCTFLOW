@@ -18,7 +18,7 @@ NUM_FIELDS = ["cover_top", "cover_bottom", "cover_side", "cover_end", "end_ext",
 INT_FIELDS = ["top_n", "bot_n"]
 TEXT_FIELDS = ["top_zones", "bot_zones"]
 COMBO_NUM = {"lap_factor": ["50", "60"], "stock": ["6000", "12000"]}
-BOOL_FIELDS = ["links_on", "link_flip", "primary", "stop_cols"]
+BOOL_FIELDS = ["links_on", "link_flip", "primary", "stop_cols", "full_length"]
 
 
 class BeamRebarWindow(forms.WPFWindow):

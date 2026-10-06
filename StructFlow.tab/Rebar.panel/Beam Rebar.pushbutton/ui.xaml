@@ -19,6 +19,8 @@
                 <TextBlock Text="Sides"/><TextBox x:Name="cover_side"/>
                 <TextBlock Text="Ends"/><TextBox x:Name="cover_end"/>
                 <TextBlock Text="Extend bars into supports (0 = stop at end cover)"/><TextBox x:Name="end_ext"/>
+                <CheckBox x:Name="full_length" Margin="0,4,0,2"
+                          Content="Main bars run side to side: through the end supports to their far face (minus end cover)"/>
             </WrapPanel>
         </GroupBox>
 

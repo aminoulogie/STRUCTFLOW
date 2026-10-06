@@ -49,6 +49,9 @@ DEFAULTS = {
     "link_offset": 50.0, "link_hook": "Stirrup/Tie - 135 deg.",
     "link_flip": False, "primary": False, "stop_cols": True,
     "display": "FirstMidLast",
+    "full_length": False,
+    # manual splice centres, mm from beam start face (None = automatic)
+    "top_splices": None, "bot_splices": None,
 }
 
 DISPLAY_MODES = [
@@ -141,7 +144,7 @@ def _get_data(el):
 
 def load_beam_settings(beam):
     raw = _get_data(beam)
-    if not raw or raw == _AUTO_MARK:
+    if not raw or raw.startswith(_AUTO_MARK):
         return None
     s = dict(DEFAULTS)
     s.update(json.loads(raw))
@@ -149,7 +152,13 @@ def load_beam_settings(beam):
 
 
 def is_auto_rebar(rebar):
-    return _get_data(rebar) == _AUTO_MARK
+    return (_get_data(rebar) or "").startswith(_AUTO_MARK)
+
+
+def rebar_layer(rebar):
+    """'top', 'bot', 'link' or '' for StructFlow bars."""
+    data = _get_data(rebar) or ""
+    return data.split("|")[1] if data.startswith(_AUTO_MARK + "|") else ""
 
 
 # -------------------------------------------------------- beam geometry
@@ -293,6 +302,41 @@ def junctions(doc, beam, fr, warn):
     return merged(beams), merged(cols)
 
 
+def end_supports(doc, beam, fr):
+    """Far faces (u) of the supports at each beam end, for bars that run
+    'side to side' through the supports. Falls back to the beam ends."""
+    bb = beam.get_BoundingBox(None)
+    pad = XYZ(50 * MM, 50 * MM, 50 * MM)
+    cats = List[BuiltInCategory]([BuiltInCategory.OST_StructuralFraming,
+                                  BuiltInCategory.OST_StructuralColumns])
+    els = (FilteredElementCollector(doc)
+           .WhereElementIsNotElementType()
+           .WherePasses(ElementMulticategoryFilter(cats))
+           .WherePasses(BoundingBoxIntersectsFilter(Outline(bb.Min - pad, bb.Max + pad))))
+    start, end = fr.u0, fr.u1
+    for el in els:
+        if el.Id == beam.Id:
+            continue
+        pts = _points(el)
+        if not pts:
+            continue
+        vs = [fr.v(p) for p in pts]
+        ws = [p.Z for p in pts]
+        if min(vs) > fr.v0 + 5 * MM or max(vs) < fr.v1 - 5 * MM:
+            continue
+        if max(ws) < fr.w0 + TOL or min(ws) > fr.w1 - TOL:
+            continue
+        us = [fr.u(p) for p in pts]
+        a, b = min(us), max(us)
+        if b - a > 2000 * MM:
+            continue  # a collinear continuation, not a support
+        if a < fr.u0 - TOL and b >= fr.u0 - 5 * MM and b <= fr.u0 + (b - a):
+            start = min(start, a)
+        if b > fr.u1 + TOL and a <= fr.u1 + 5 * MM and a >= fr.u1 - (b - a):
+            end = max(end, b)
+    return start, end
+
+
 # --------------------------------------------------------- splice zones
 def parse_zones(text, fr):
     """'2000-3500, 6000-7000' (mm from the beam start face) -> u intervals."""
@@ -321,6 +365,24 @@ def auto_zones(fr, supports, top):
     if not top:
         zones.extend(supports)
     return zones
+
+
+def split_manual(us, ue, leg_s, leg_e, stock, lap, centres, warn):
+    """Pieces from fixed splice centres; the lap stays exactly `lap`."""
+    cs = sorted(c for c in centres if us + lap / 2.0 < c < ue - lap / 2.0)
+    if len(cs) < len(centres):
+        warn("a manual splice was outside the bar and was ignored")
+    starts = [us] + [c - lap / 2.0 for c in cs]
+    ends = [c + lap / 2.0 for c in cs] + [ue]
+    pieces = []
+    for i, (a, b) in enumerate(zip(starts, ends)):
+        first, last = i == 0, i == len(starts) - 1
+        length = (b - a) + (leg_s if first else 0) + (leg_e if last else 0)
+        if length > stock + TOL:
+            warn("bar piece %d is %.0f mm, longer than the %.0f mm stock length"
+                 % (i + 1, length / MM, stock / MM))
+        pieces.append((a, b, first, last))
+    return pieces
 
 
 def split_run(us, ue, leg_s, leg_e, stock, lap, zones, warn):
@@ -438,8 +500,8 @@ def apply_display(rebar, view, mode):
         rebar.SetBarHiddenStatus(view, i, i not in show)
 
 
-def _mark(el):
-    _set_data(el, _AUTO_MARK)
+def _mark(el, layer):
+    _set_data(el, _AUTO_MARK + "|" + layer)
 
 
 def delete_auto_rebar(doc, beam):
@@ -474,7 +536,11 @@ def _long_bars(doc, beam, fr, s, top, supports, made, warn):
         va = vb = (fr.v0 + fr.v1) / 2.0
 
     ext = s["end_ext"] * MM
-    if ext > TOL:
+    if s.get("full_length"):
+        fa, fb = end_supports(doc, beam, fr)
+        ce = s["cover_end"] * MM
+        us, ue = fa + ce + d / 2.0, fb - ce - d / 2.0
+    elif ext > TOL:
         us, ue = fr.u0 - ext + d / 2.0, fr.u1 + ext - d / 2.0
     else:
         ce = s["cover_end"] * MM
@@ -495,7 +561,14 @@ def _long_bars(doc, beam, fr, s, top, supports, made, warn):
     lap = s["lap_factor"] * bt.BarNominalDiameter
     zone_text = s["top_zones" if top else "bot_zones"].strip()
     zones = parse_zones(zone_text, fr) if zone_text else auto_zones(fr, supports, top)
-    pieces = split_run(us, ue, leg_s, leg_e, s["stock"] * MM, lap, zones, warn)
+    manual = s.get("top_splices" if top else "bot_splices")
+    if manual is not None:
+        pieces = split_manual(us, ue, leg_s, leg_e, s["stock"] * MM, lap,
+                              [fr.u0 + c * MM for c in manual], warn)
+    else:
+        pieces = split_run(us, ue, leg_s, leg_e, s["stock"] * MM, lap, zones, warn)
+    s[("top" if top else "bot") + "_splices_at"] = [
+        round((b - lap / 2.0 - fr.u0) / MM, 1) for a, b, _, last in pieces if not last]
 
     shapes = {
         2: by_name(doc, RebarShape, "21"),
@@ -517,7 +590,7 @@ def _long_bars(doc, beam, fr, s, top, supports, made, warn):
             box = (p(a, w), fr.X * (b - a), XYZ.BasisZ * (sign * leg))
         r = create_rebar(doc, beam, RebarStyle.Standard, bt, fr.Y, curves, shape, box=box)
         set_layout(r, n, vb - va)
-        _mark(r)
+        _mark(r, "top" if top else "bot")
         made.append(r)
 
 
@@ -561,7 +634,7 @@ def _links(doc, beam, fr, s, beam_j, col_j, view, made, warn):
             acc.SetLayoutAsSingle()
         else:
             acc.SetLayoutAsMaximumSpacing(spacing, length, True, True, True)
-        _mark(r)
+        _mark(r, "link")
         apply_display(r, view, s["display"])
         made.append(r)
 
@@ -578,6 +651,7 @@ def build(doc, beam, s, view=None):
     supports = merged(beam_j + col_j)
 
     deleted = delete_auto_rebar(doc, beam)
+    s = dict(s)
     made = []
     _long_bars(doc, beam, fr, s, True, supports, made, warn)
     _long_bars(doc, beam, fr, s, False, supports, made, warn)

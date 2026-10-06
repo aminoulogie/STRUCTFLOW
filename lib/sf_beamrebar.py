@@ -171,6 +171,10 @@ def _solids(el):
     opt = Options()
     opt.DetailLevel = ViewDetailLevel.Fine
     opt.ComputeReferences = False
+    return _solids_with(el, opt)
+
+
+def _solids_with(el, opt):
     out = []
 
     def walk(geo):

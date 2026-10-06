@@ -17,14 +17,14 @@ NONE = "(none)"
 DEFAULT = "(default)"
 LAST = "(last used)"
 
-NUM = ["margin", "sec_offset", "sec_depth"]
+NUM = ["mark_ext", "anno_space", "sec_offset", "sec_depth"]
 SCALES = ["scale_elev", "scale_section"]
 SLIDERS = ["raise_elev", "raise_sec"]
 TEXT = ["elev_name", "sec_name", "lap_suffix"]
 BOOLS = ["make_elev", "sec_start", "sec_mid", "sec_end", "per_span", "replace_old",
          "other_main", "other_links", "unobscure", "fine",
-         "tag_leader", "link_mra", "lap_dims", "grid_dims",
-         "label_plan", "mark_labels", "label_view", "avoid_clash"]
+         "tag_leader", "link_mra", "lap_dims", "grid_dims", "depth_dim",
+         "label_plan", "avoid_clash"]
 
 
 class ViewsWindow(forms.WPFWindow):
@@ -45,7 +45,6 @@ class ViewsWindow(forms.WPFWindow):
             "mra_type": sorted(sv.mra_types(doc)) or [NONE],
             "lap_dim_type": [DEFAULT] + sorted(sv.linear_dim_types(doc)),
             "label_type": texts,
-            "title_type": texts,
         }
         for key, items in self.lists.items():
             for it in items:

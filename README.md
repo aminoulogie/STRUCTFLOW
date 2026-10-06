@@ -22,6 +22,7 @@ git clone https://github.com/aminoulogie/STRUCTFLOW.git "%APPDATA%\pyRevit\Exten
 - **Diagnose**: tests every rebar creation method on one beam and reports what Revit accepts (changes nothing).
 
 **Views panel**
+- **Beam Sheets**: places each beam's long section and its cross sections in a row on your title block, filling sheets top to bottom.
 - **Beam Views**: long section + cross sections (start / mid / end of each span) with chosen section type, view templates, scales and tags. Names like A-A, B-B for long sections and A1-A1, A2-A2 for cross sections. Setups can be saved per client.
 
 All lengths in the dialogs are millimetres.

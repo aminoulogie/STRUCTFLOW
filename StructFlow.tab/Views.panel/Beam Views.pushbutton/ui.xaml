@@ -25,7 +25,10 @@
                 <StackPanel>
                     <WrapPanel>
                         <TextBlock Text="Section type"/><ComboBox x:Name="section_type"/>
-                        <TextBlock Text="Margin around beam (mm)"/><TextBox x:Name="margin"/>
+                    </WrapPanel>
+                    <WrapPanel>
+                        <TextBlock Text="Section line past the beam (mm)"/><TextBox x:Name="mark_ext"/>
+                        <TextBlock Text="Room for tags around views (mm on paper)"/><TextBox x:Name="anno_space"/>
                     </WrapPanel>
                     <GroupBox>
                         <GroupBox.Header><CheckBox x:Name="make_elev" Content="Long section / elevation along the beam" Margin="0"/></GroupBox.Header>
@@ -116,6 +119,7 @@
                         </StackPanel>
                     </GroupBox>
                     <CheckBox x:Name="grid_dims" Content="Dimension between grids in long sections"/>
+                    <CheckBox x:Name="depth_dim" Content="Dimension the beam depth in cross sections"/>
                 </StackPanel>
             </TabItem>
 
@@ -124,16 +128,11 @@
                     <GroupBox Header="Section names (A-A, A1-A1...)">
                         <StackPanel>
                             <CheckBox x:Name="label_plan" Content="Next to the section marks in the plan (run from a plan view)"/>
-                            <CheckBox x:Name="mark_labels" Content="Next to the section lines inside the long sections and cross sections"/>
                             <WrapPanel><TextBlock Text="Text type" Width="110"/><ComboBox x:Name="label_type" Width="330"/></WrapPanel>
                         </StackPanel>
                     </GroupBox>
-                    <GroupBox Header="View title">
-                        <StackPanel>
-                            <CheckBox x:Name="label_view" Content="Write the view name under the beam inside each view"/>
-                            <WrapPanel><TextBlock Text="Text type" Width="110"/><ComboBox x:Name="title_type" Width="330"/></WrapPanel>
-                        </StackPanel>
-                    </GroupBox>
+                    <TextBlock Foreground="Gray" TextWrapping="Wrap" Margin="0,0,0,6"
+                               Text="No text is written inside the views: the view titles come from the sheets (Beam Sheets)."/>
                     <CheckBox x:Name="avoid_clash" Content="Keep section marks from colliding (widens only the view's white margin)"/>
                 </StackPanel>
             </TabItem>

@@ -34,7 +34,9 @@ LINK_MODES = [
 
 DEFAULTS = {
     # views
-    "section_type": "", "margin": 300.0, "make_elev": True,
+    "section_type": "", "make_elev": True,
+    # section line / crop: how far past the beam (model mm); room for tags (paper mm)
+    "mark_ext": 100.0, "anno_space": 30.0,
     "template_elev": "", "scale_elev": 50, "elev_name": "{L}-{L}", "raise_elev": 30,
     "sec_start": True, "sec_mid": True, "sec_end": True, "per_span": True,
     "sec_offset": 300.0, "sec_depth": 200.0,
@@ -47,10 +49,9 @@ DEFAULTS = {
     "beam_tag": "", "bar_tag": "", "link_tag": "", "tag_leader": True,
     "link_mra": True, "mra_type": "",
     "lap_dims": True, "lap_dim_type": "", "lap_suffix": " (overlap)",
-    "grid_dims": True,
+    "grid_dims": True, "depth_dim": True,
     # labels
-    "label_plan": True, "label_type": "", "mark_labels": True,
-    "label_view": True, "title_type": "", "avoid_clash": True,
+    "label_plan": True, "label_type": "", "avoid_clash": True,
 }
 
 
@@ -143,7 +144,6 @@ def resolve(doc, s):
         "mra": mra_types(doc).get(s["mra_type"]) if s["link_mra"] else None,
         "lap_dim": linear_dim_types(doc).get(s["lap_dim_type"]),
         "label_text": pick_text(s["label_type"]),
-        "title_text": pick_text(s["title_type"]),
     }
 
 
@@ -219,10 +219,11 @@ def delete_old_views(doc, beam):
     return len(ids)
 
 
-def make_section(doc, beam, vft, origin, bx, bz, half_w, half_h, top_extra, depth,
-                 name, scale, template, fine, letter):
+def make_section(doc, beam, vft, origin, bx, bz, half_w, half_h, depth,
+                 name, scale, template, fine, letter, anno, anno_top):
     """Section box: cut plane at origin, looking along -bz, far clip at depth.
-    top_extra raises the top of the crop (room for tags above the beam)."""
+    The crop hugs the beam (short section lines in other views); tags live
+    in the annotation crop, `anno` on paper around it, `anno_top` above."""
     t = Transform.Identity
     t.Origin = origin
     t.BasisX = bx
@@ -231,7 +232,7 @@ def make_section(doc, beam, vft, origin, bx, bz, half_w, half_h, top_extra, dept
     box = BoundingBoxXYZ()
     box.Transform = t
     box.Min = XYZ(-half_w, -half_h, -depth)
-    box.Max = XYZ(half_w, half_h + top_extra, 0)
+    box.Max = XYZ(half_w, half_h, 0)
     v = ViewSection.CreateSection(doc, vft.Id, box)
     _set_name(v, name)
     try:
@@ -243,8 +244,36 @@ def make_section(doc, beam, vft, origin, bx, bz, half_w, half_h, top_extra, dept
     if template is not None:
         v.ViewTemplateId = template.Id
     v.CropBoxActive = True
+    _annotation_crop(doc, v, origin.Z + half_h, anno, anno_top)
     br._set_data(v, _VIEW_MARK + beam.UniqueId + "|" + letter)
     return v
+
+
+def _annotation_crop(doc, v, crop_top_z, anno, anno_top):
+    """Turn on the annotation crop and size it. Revit's offsets are paper
+    distances; if this version reads them as model distances, rescale."""
+    try:
+        p = v.get_Parameter(BuiltInParameter.VIEWER_ANNOTATION_CROP_ACTIVE)
+        if p is not None and not p.IsReadOnly:
+            p.Set(1)
+        mgr = v.GetCropRegionShapeManager()
+        if not mgr.CanHaveAnnotationCrop:
+            return
+
+        def apply(k):
+            mgr.LeftAnnotationCropOffset = anno * k
+            mgr.RightAnnotationCropOffset = anno * k
+            mgr.BottomAnnotationCropOffset = anno * k
+            mgr.TopAnnotationCropOffset = anno_top * k
+
+        apply(1.0)
+        doc.Regenerate()
+        top = max(pt.Z for c in mgr.GetAnnotationCropShape() for pt in (c.GetEndPoint(0), c.GetEndPoint(1)))
+        got = top - crop_top_z  # model distance actually obtained
+        if abs(got - anno_top) < abs(got - anno_top * v.Scale):
+            apply(float(v.Scale))
+    except Exception:
+        pass
 
 
 def _mark_of(beam):
@@ -482,9 +511,8 @@ def _hide_other_beams(doc, view, own_ids, s):
         view.HideElements(List[ElementId](hide))
 
 
-def _grid_dims(doc, view, fr, vm, w, half_len, warn):
-    """Dimension string between the grids that cross this long section."""
-    um = (fr.u0 + fr.u1) / 2.0
+def grid_hits(doc, fr, lo, hi):
+    """[(u, grid)] for straight grids crossing the beam line between lo and hi."""
     hits = []
     for g in FilteredElementCollector(doc).OfClass(Grid):
         c = g.Curve
@@ -495,11 +523,17 @@ def _grid_dims(doc, view, fr, vm, w, half_len, warn):
         if abs(den) < 1e-6:
             continue  # parallel to the beam
         t = ((p.X - fr.o.X) * d.Y - (p.Y - fr.o.Y) * d.X) / den
-        if um - half_len <= t <= um + half_len:
+        if lo <= t <= hi:
             hits.append((t, g))
+    return sorted(hits, key=lambda h: h[0])
+
+
+def _grid_dims(doc, view, fr, vm, w, half_len, warn):
+    """Dimension string between the grids that cross this long section."""
+    um = (fr.u0 + fr.u1) / 2.0
+    hits = grid_hits(doc, fr, um - half_len, um + half_len)
     if len(hits) < 2:
         return
-    hits.sort(key=lambda h: h[0])
     refs = ReferenceArray()
     for _, g in hits:
         refs.Append(Reference(g))
@@ -508,6 +542,60 @@ def _grid_dims(doc, view, fr, vm, w, half_len, warn):
         doc.Create.NewDimension(view, line, refs)
     except Exception as ex:
         warn("could not dimension grids in '%s': %s" % (view.Name, br._err(ex)))
+
+
+def _depth_dim(doc, view, beam, fr, u, v_line, warn):
+    """Beam depth dimension (top face to bottom face) beside a cross section."""
+    opt = Options()
+    opt.View = view
+    opt.ComputeReferences = True
+    top = bot = None
+    for solid in br._solids_with(beam, opt):
+        for f in solid.Faces:
+            n = getattr(f, "FaceNormal", None)
+            if n is None or f.Reference is None:
+                continue
+            if n.Z > 0.99 and (top is None or f.Origin.Z > top[1]):
+                top = (f.Reference, f.Origin.Z)
+            elif n.Z < -0.99 and (bot is None or f.Origin.Z < bot[1]):
+                bot = (f.Reference, f.Origin.Z)
+    if top is None or bot is None:
+        warn("could not find the beam top/bottom faces in '%s'" % view.Name)
+        return
+    refs = ReferenceArray()
+    refs.Append(top[0])
+    refs.Append(bot[0])
+    try:
+        doc.Create.NewDimension(view, Line.CreateBound(fr.pt(u, v_line, bot[1]), fr.pt(u, v_line, top[1])), refs)
+    except Exception as ex:
+        warn("could not dimension the beam depth in '%s': %s" % (view.Name, br._err(ex)))
+
+
+def _multi_tag(doc, view, el, sym, head, warn):
+    """One tag with a leader to every bar of the set (as seen in the view)."""
+    if sym is None:
+        return
+    st = SubTransaction(doc)
+    st.Start()
+    try:
+        tag = IndependentTag.Create(doc, sym.Id, view.Id, Reference(el), True,
+                                    TagOrientation.Horizontal, head)
+        seen = set()
+        extra = []
+        for ref in _bar_references(el, view):
+            key = ref.ConvertToStableRepresentation(doc)
+            if key not in seen:
+                seen.add(key)
+                extra.append(ref)
+        if len(extra) > 1:
+            try:
+                tag.AddReferences(List[Reference](extra))
+            except Exception:
+                pass  # single leader is still fine
+        st.Commit()
+    except Exception:
+        st.RollBack()
+        _tag(doc, view, el, sym, head, True, warn)
 
 
 def _note(doc, view, pt, text, type_id, beam=None):
@@ -575,22 +663,25 @@ def build_views(doc, beam, s, look, warn, L="A", ctx=None):
 
     vm, wm = (fr.v0 + fr.v1) / 2.0, (fr.w0 + fr.w1) / 2.0
     um = (fr.u0 + fr.u1) / 2.0
-    half_h = (fr.w1 - fr.w0) / 2.0 + s["margin"] * MM
-    base = s["margin"] * MM
-    views, long_view, crosses = [], None, []
+    ext = s["mark_ext"] * MM
+    half_h = (fr.w1 - fr.w0) / 2.0 + ext
+    half_b = (fr.v1 - fr.v0) / 2.0
+    anno = s["anno_space"] * MM  # paper
+    views = []
+    cuts = section_positions(doc, beam, fr, s, supports)
 
     # ---- long section
     if s["make_elev"]:
         sc = int(s["scale_elev"])
         paper = lambda mm: mm * sc * MM
         half_l = (fr.u1 - fr.u0) / 2.0
-        extra = 2 * half_h * s["raise_elev"] / 100.0
-        m = _fit(ctx, s, base, lambda m: [fr.pt(um - half_l - m, vm, 0), fr.pt(um + half_l + m, vm, 0)])
+        anno_top = anno + (2 * half_h / sc) * s["raise_elev"] / 100.0
+        m = _fit(ctx, s, ext, lambda m: [fr.pt(um - half_l - m, vm, 0), fr.pt(um + half_l + m, vm, 0)])
         v = make_section(doc, beam, look["vft"], fr.pt(um, vm, wm), fr.X, -fr.Y,
-                         half_l + m, half_h, extra, (fr.v1 - fr.v0) / 2.0 + 50 * MM,
-                         _fmt(s["elev_name"], beam, L), sc, look["t_elev"], s["fine"], L)
+                         half_l + m, half_h, half_b + 50 * MM,
+                         _fmt(s["elev_name"], beam, L), sc, look["t_elev"], s["fine"], L,
+                         anno, anno_top)
         doc.Regenerate()
-        long_view = (v, half_h + extra)
         _plan_label(doc, beam, ctx, s, look, v, fr.pt(um + half_l + m, vm, 0), fr.X, warn)
         _hide_other_beams(doc, v, own, s)
         if s["unobscure"]:
@@ -600,20 +691,28 @@ def build_views(doc, beam, s, look, warn, L="A", ctx=None):
             _grid_dims(doc, v, fr, vm, fr.w1 + paper(30), half_l + m, warn)
         _tag(doc, v, beam, look["beam_tag"], fr.pt(um, vm, fr.w1 + paper(24)), False, warn)
 
-        # one simple tag per main bar, in a clear part of the bar
+        # things the eye already has to read: keep tags and the 3 links away
+        room = paper(12)
+        busy = list(supports) + list(laps)
+        busy += [(g - room, g + room) for g, _ in grid_hits(doc, fr, fr.u0, fr.u1)]
+        busy += [(c - room, c + room) for c in cuts]
+        busy.append((um - paper(20), um + paper(20)))  # beam tag
+
+        # one simple tag per main bar piece
         for b in bars:
             if b.kind == "link":
                 continue
             others = [(o.a, o.b) for o in bars if o.kind == b.kind and o is not b]
-            u = clear_point(b.a, b.b, others + supports + laps, trim=0.05)
+            u = clear_point(b.a, b.b, others + busy, trim=0.05)
             z = fr.w1 + paper(7) if b.kind == "top" else fr.w0 - paper(7)
             _tag(doc, v, b.r, look["bar_tag"], fr.pt(u, vm, z), s["tag_leader"], warn)
+            busy.append((u - room, u + room))
 
         # links: shown at a clear spot, multi-rebar annotation above the bar tag
         for b in bars:
             if b.kind != "link":
                 continue
-            u = clear_point(b.a, b.b, supports + laps)
+            u = clear_point(b.a, b.b, busy)
             show_links_at(b.r, v, s["elev_links"], u, b.a, b.b)
             done = False
             if look["mra"] is not None:
@@ -625,25 +724,22 @@ def build_views(doc, beam, s, look, warn, L="A", ctx=None):
 
         if s["lap_dims"]:
             _lap_dims(doc, v, fr, vm, bars, look["lap_dim"], s["lap_suffix"], paper, warn)
-        if s["label_view"]:
-            _note(doc, v, fr.pt(um, vm, fr.w0 - paper(25)), v.Name, look["title_text"])
         views.append(v)
 
     # ---- cross sections, looking from the beam start toward its end
     sc = int(s["scale_section"])
     paper = lambda mm: mm * sc * MM
-    half_b = (fr.v1 - fr.v0) / 2.0
-    extra = 2 * half_h * s["raise_sec"] / 100.0
+    anno_top = anno + (2 * half_h / sc) * s["raise_sec"] / 100.0
     bz = -fr.X
-    bx = XYZ.BasisZ.CrossProduct(bz)
-    for i, u in enumerate(section_positions(doc, beam, fr, s, supports)):
+    bx = XYZ.BasisZ.CrossProduct(bz)  # view right = -v, so +v is the left of the view
+    left, right = fr.v1, fr.v0
+    for i, u in enumerate(cuts):
         letter = chr(ord("A") + i) if i < 26 else str(i + 1)
-        m = _fit(ctx, s, base, lambda m: [fr.pt(u, vm - half_b - m, 0), fr.pt(u, vm + half_b + m, 0)])
+        m = _fit(ctx, s, ext, lambda m: [fr.pt(u, vm - half_b - m, 0), fr.pt(u, vm + half_b + m, 0)])
         v = make_section(doc, beam, look["vft"], fr.pt(u, vm, wm), bx, bz, half_b + m, half_h,
-                         extra, s["sec_depth"] * MM, _fmt(s["sec_name"], beam, L, letter, i + 1),
-                         sc, look["t_sec"], s["fine"], L)
+                         s["sec_depth"] * MM, _fmt(s["sec_name"], beam, L, letter, i + 1),
+                         sc, look["t_sec"], s["fine"], L, anno, anno_top)
         doc.Regenerate()
-        crosses.append((v, u, half_h + extra))
         _plan_label(doc, beam, ctx, s, look, v, fr.pt(u, vm + half_b + m, 0), fr.Y, warn)
         _hide_other_beams(doc, v, own, s)
         if s["unobscure"]:
@@ -654,28 +750,15 @@ def build_views(doc, beam, s, look, warn, L="A", ctx=None):
             if not (b.a - 1 * MM <= u <= b.b + 1 * MM):
                 continue
             if b.kind == "link":
-                _tag(doc, v, b.r, look["link_tag"], fr.pt(u, fr.v0 - paper(12), wm),
-                     s["tag_leader"], warn)
+                # tag on the left, leader to the link at mid height
+                _tag(doc, v, b.r, look["link_tag"], fr.pt(u, left + paper(14), wm), True, warn)
                 continue
             k[b.kind] += 1
-            dv = paper(18) * (k[b.kind] - 1)  # two pieces at a lap: side by side
-            z = fr.w1 + paper(7) if b.kind == "top" else fr.w0 - paper(7)
-            _tag(doc, v, b.r, look["bar_tag"], fr.pt(u, vm + dv, z), s["tag_leader"], warn)
-        if s["label_view"]:
-            _note(doc, v, fr.pt(u, vm, fr.w0 - paper(22)), v.Name, look["title_text"])
+            # one tag per bar set, top-left above / bottom-left below, leaders to every bar
+            z = (fr.w1 + paper(7 + 6 * (k[b.kind] - 1)) if b.kind == "top"
+                 else fr.w0 - paper(7 + 6 * (k[b.kind] - 1)))
+            _multi_tag(doc, v, b.r, look["bar_tag"], fr.pt(u, left + paper(4), z), warn)
+        if s["depth_dim"]:
+            _depth_dim(doc, v, beam, fr, u, right - paper(8), warn)
         views.append(v)
-
-    # ---- names next to the section lines inside the other views
-    if s["mark_labels"]:
-        try:
-            if long_view is not None:
-                lv, l_top = long_view
-                pe = lambda mm: mm * int(s["scale_elev"]) * MM
-                for cv, u, c_top in crosses:
-                    _note(doc, lv, fr.pt(u + pe(2), vm, wm + c_top + pe(2)), cv.Name, look["label_text"])
-                for cv, u, c_top in crosses:
-                    _note(doc, cv, fr.pt(u, vm + paper(2), wm + l_top + paper(2)), lv.Name,
-                          look["label_text"])
-        except Exception as ex:
-            warn("could not label section lines: %s" % br._err(ex))
     return views

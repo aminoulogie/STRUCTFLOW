@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Create a long section and cross sections for each selected beam,
-with your chosen section type, view templates, scales and tags."""
+with your chosen section type, view templates, scales, tags, multi-rebar
+annotations, lap dimensions and labels."""
 __title__ = "Beam\nViews"
 
 import os
@@ -13,14 +14,17 @@ import sf_views as sv
 
 doc, uidoc = revit.doc, revit.uidoc
 NONE = "(none)"
+DEFAULT = "(default)"
 LAST = "(last used)"
 
 NUM = ["margin", "sec_offset", "sec_depth"]
 SCALES = ["scale_elev", "scale_section"]
-TEXT = ["elev_name", "sec_name"]
-BOOLS = ["make_elev", "sec_start", "sec_mid", "sec_end", "per_span",
-         "tag_leader", "unobscure", "fine", "replace_old",
-         "label_plan", "label_view", "grid_dims", "avoid_clash"]
+SLIDERS = ["raise_elev", "raise_sec"]
+TEXT = ["elev_name", "sec_name", "lap_suffix"]
+BOOLS = ["make_elev", "sec_start", "sec_mid", "sec_end", "per_span", "replace_old",
+         "other_main", "other_links", "unobscure", "fine",
+         "tag_leader", "link_mra", "lap_dims", "grid_dims",
+         "label_plan", "mark_labels", "label_view", "avoid_clash"]
 
 
 class ViewsWindow(forms.WPFWindow):
@@ -29,13 +33,19 @@ class ViewsWindow(forms.WPFWindow):
         self.result = None
         self._loading = True
         self.info.Text = "{} beam(s) selected.".format(n_beams)
+        rebar_tags = sorted(sv.tag_types(doc, BuiltInCategory.OST_RebarTags))
+        texts = [DEFAULT] + sorted(sv.text_types(doc))
         self.lists = {
             "section_type": sorted(sv.section_types(doc)),
             "template_elev": [NONE] + sorted(sv.section_templates(doc)),
             "template_section": [NONE] + sorted(sv.section_templates(doc)),
             "beam_tag": [NONE] + sorted(sv.tag_types(doc, BuiltInCategory.OST_StructuralFramingTags)),
-            "bar_tag": [NONE] + sorted(sv.tag_types(doc, BuiltInCategory.OST_RebarTags)),
-            "link_tag": [NONE] + sorted(sv.tag_types(doc, BuiltInCategory.OST_RebarTags)),
+            "bar_tag": [NONE] + rebar_tags,
+            "link_tag": [NONE] + rebar_tags,
+            "mra_type": sorted(sv.mra_types(doc)) or [NONE],
+            "lap_dim_type": [DEFAULT] + sorted(sv.linear_dim_types(doc)),
+            "label_type": texts,
+            "title_type": texts,
         }
         for key, items in self.lists.items():
             for it in items:
@@ -43,6 +53,8 @@ class ViewsWindow(forms.WPFWindow):
         for key in SCALES:
             for sc in ("10", "20", "25", "50", "100"):
                 getattr(self, key).Items.Add(sc)
+        for _, label in sv.LINK_MODES:
+            self.elev_links.Items.Add(label)
         self.preset.Items.Add(LAST)
         for name in sorted(sv.load_presets()):
             if name != LAST:
@@ -59,16 +71,20 @@ class ViewsWindow(forms.WPFWindow):
             getattr(self, key).Text = "{:g}".format(s[key])
         for key in SCALES:
             getattr(self, key).Text = str(int(s[key]))
+        for key in SLIDERS:
+            getattr(self, key).Value = float(s[key])
         for key in TEXT:
             getattr(self, key).Text = s[key]
         for key in BOOLS:
             getattr(self, key).IsChecked = bool(s[key])
+        modes = [k for k, _ in sv.LINK_MODES]
+        self.elev_links.SelectedIndex = modes.index(s["elev_links"]) if s["elev_links"] in modes else 0
 
     def _read(self):
         s = dict(sv.DEFAULTS)
         for key in self.lists:
             val = getattr(self, key).SelectedItem
-            s[key] = "" if val in (None, NONE) else val
+            s[key] = "" if val in (None, NONE, DEFAULT) else val
         if not s["section_type"]:
             raise ValueError("This model has no section view type.")
         for key in NUM:
@@ -83,10 +99,13 @@ class ViewsWindow(forms.WPFWindow):
                 raise ValueError("scale must be a whole number, e.g. 20 for 1:20")
             if s[key] <= 0:
                 raise ValueError("scale must be positive")
+        for key in SLIDERS:
+            s[key] = int(round(getattr(self, key).Value))
         for key in TEXT:
             s[key] = getattr(self, key).Text
         for key in BOOLS:
             s[key] = bool(getattr(self, key).IsChecked)
+        s["elev_links"] = sv.LINK_MODES[max(self.elev_links.SelectedIndex, 0)][0]
         return s
 
     def preset_changed(self, sender, args):
@@ -133,27 +152,17 @@ if beams:
     s = win.result
     if s:
         sv.save_preset(LAST, s)
-        tags_f = sv.tag_types(doc, BuiltInCategory.OST_StructuralFramingTags)
-        tags_r = sv.tag_types(doc, BuiltInCategory.OST_RebarTags)
-        temps = sv.section_templates(doc)
-        look = {
-            "vft": sv.section_types(doc)[s["section_type"]],
-            "t_elev": temps.get(s["template_elev"]),
-            "t_sec": temps.get(s["template_section"]),
-            "beam_tag": tags_f.get(s["beam_tag"]),
-            "bar_tag": tags_r.get(s["bar_tag"]),
-            "link_tag": tags_r.get(s["link_tag"]),
-        }
         out = script.get_output()
         total = 0
         t = Transaction(doc, "StructFlow Beam Views")
         t.Start()
+        look = sv.resolve(doc, s)
         letters = sv.assign_letters(doc, beams)
+        beams.sort(key=lambda b: letters[b.Id])
         plan = revit.active_view if isinstance(revit.active_view, ViewPlan) else None
         if s["label_plan"] and plan is None:
             print("note: open a plan view and run again to get names next to the section marks.")
         ctx = sv.new_context(doc, plan)
-        beams.sort(key=lambda b: letters[b.Id])
         for beam in beams:
             warnings = []
             st = SubTransaction(doc)

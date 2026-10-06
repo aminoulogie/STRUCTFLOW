@@ -1,6 +1,6 @@
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="StructFlow - Beam Rebar" Width="600" SizeToContent="Height"
+        Title="StructFlow - Beam Rebar" Width="640" SizeToContent="Height"
         WindowStartupLocation="CenterScreen" ResizeMode="NoResize" FontSize="12">
     <Window.Resources>
         <Style TargetType="TextBlock"><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="0,0,6,0"/></Style>
@@ -11,85 +11,120 @@
     </Window.Resources>
     <StackPanel Margin="12">
         <TextBlock x:Name="info" Margin="0,0,0,8" TextWrapping="Wrap"/>
+        <TabControl Padding="8">
+            <TabItem Header="Bars">
+                <StackPanel>
+                    <GroupBox Header="Covers (mm)">
+                        <WrapPanel>
+                            <TextBlock Text="Top"/><TextBox x:Name="cover_top"/>
+                            <TextBlock Text="Bottom"/><TextBox x:Name="cover_bottom"/>
+                            <TextBlock Text="Sides"/><TextBox x:Name="cover_side"/>
+                            <TextBlock Text="Ends"/><TextBox x:Name="cover_end"/>
+                        </WrapPanel>
+                    </GroupBox>
+                    <GroupBox Header="Main bars (A / C = shape 21 legs, outside dims; 0 = straight)">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="70"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                            <TextBlock Grid.Column="1" Text="Bar type"/><TextBlock Grid.Column="2" Text="No. of bars"/>
+                            <TextBlock Grid.Column="3" Text="A leg (mm)"/><TextBlock Grid.Column="4" Text="C leg (mm)"/>
+                            <TextBlock Grid.Row="1" Text="Top"/>
+                            <ComboBox Grid.Row="1" Grid.Column="1" x:Name="top_type"/>
+                            <TextBox Grid.Row="1" Grid.Column="2" x:Name="top_n"/>
+                            <TextBox Grid.Row="1" Grid.Column="3" x:Name="top_A"/>
+                            <TextBox Grid.Row="1" Grid.Column="4" x:Name="top_C"/>
+                            <TextBlock Grid.Row="2" Text="Bottom"/>
+                            <ComboBox Grid.Row="2" Grid.Column="1" x:Name="bot_type"/>
+                            <TextBox Grid.Row="2" Grid.Column="2" x:Name="bot_n"/>
+                            <TextBox Grid.Row="2" Grid.Column="3" x:Name="bot_A"/>
+                            <TextBox Grid.Row="2" Grid.Column="4" x:Name="bot_C"/>
+                        </Grid>
+                    </GroupBox>
+                    <GroupBox Header="Bar ends">
+                        <StackPanel>
+                            <CheckBox x:Name="full_length"
+                                      Content="Main bars run side to side: through the end supports to their far face (minus end cover)"/>
+                            <WrapPanel>
+                                <TextBlock Text="Otherwise extend bars into supports (mm, 0 = stop at end cover)"/><TextBox x:Name="end_ext"/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </GroupBox>
+                </StackPanel>
+            </TabItem>
 
-        <GroupBox Header="Covers (mm)">
-            <WrapPanel>
-                <TextBlock Text="Top"/><TextBox x:Name="cover_top"/>
-                <TextBlock Text="Bottom"/><TextBox x:Name="cover_bottom"/>
-                <TextBlock Text="Sides"/><TextBox x:Name="cover_side"/>
-                <TextBlock Text="Ends"/><TextBox x:Name="cover_end"/>
-                <TextBlock Text="Extend bars into supports (0 = stop at end cover)"/><TextBox x:Name="end_ext"/>
-                <CheckBox x:Name="full_length" Margin="0,4,0,2"
-                          Content="Main bars run side to side: through the end supports to their far face (minus end cover)"/>
-            </WrapPanel>
-        </GroupBox>
+            <TabItem Header="Laps">
+                <StackPanel>
+                    <WrapPanel>
+                        <TextBlock Text="Lap length = "/>
+                        <ComboBox x:Name="lap_factor" IsEditable="True" Width="60"/>
+                        <TextBlock Text="x d       Supplier stock length (mm)"/>
+                        <ComboBox x:Name="stock" IsEditable="True"/>
+                    </WrapPanel>
+                    <TextBlock Margin="0,8,0,4" Foreground="Gray" TextWrapping="Wrap"
+                               Text="Splice zones: leave empty for the automatic rule (top bars lap in the middle third of each span, bottom bars near/over supports). Or type the client's zones as mm from the beam start face, e.g. 2000-3500, 7000-8200. Use Move Splice afterwards to move a single lap."/>
+                    <WrapPanel>
+                        <TextBlock Text="Top zones" Width="90"/><TextBox x:Name="top_zones" Width="300"/>
+                    </WrapPanel>
+                    <WrapPanel>
+                        <TextBlock Text="Bottom zones" Width="90"/><TextBox x:Name="bot_zones" Width="300"/>
+                    </WrapPanel>
+                </StackPanel>
+            </TabItem>
 
-        <GroupBox Header="Longitudinal bars (A / C = shape 21 legs, outside dims; 0 = straight)">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="70"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-                <TextBlock Grid.Column="1" Text="Bar type"/><TextBlock Grid.Column="2" Text="No. of bars"/>
-                <TextBlock Grid.Column="3" Text="A leg (mm)"/><TextBlock Grid.Column="4" Text="C leg (mm)"/>
-                <TextBlock Grid.Row="1" Text="Top"/>
-                <ComboBox Grid.Row="1" Grid.Column="1" x:Name="top_type"/>
-                <TextBox Grid.Row="1" Grid.Column="2" x:Name="top_n"/>
-                <TextBox Grid.Row="1" Grid.Column="3" x:Name="top_A"/>
-                <TextBox Grid.Row="1" Grid.Column="4" x:Name="top_C"/>
-                <TextBlock Grid.Row="2" Text="Bottom"/>
-                <ComboBox Grid.Row="2" Grid.Column="1" x:Name="bot_type"/>
-                <TextBox Grid.Row="2" Grid.Column="2" x:Name="bot_n"/>
-                <TextBox Grid.Row="2" Grid.Column="3" x:Name="bot_A"/>
-                <TextBox Grid.Row="2" Grid.Column="4" x:Name="bot_C"/>
-            </Grid>
-        </GroupBox>
+            <TabItem Header="Links">
+                <StackPanel>
+                    <CheckBox x:Name="links_on" Content="Place links / stirrups"/>
+                    <WrapPanel>
+                        <TextBlock Text="Bar type"/><ComboBox x:Name="link_type"/>
+                        <TextBlock Text="Spacing (mm)"/><TextBox x:Name="link_spacing"/>
+                        <TextBlock Text="First link from face (mm)"/><TextBox x:Name="link_offset"/>
+                    </WrapPanel>
+                    <WrapPanel>
+                        <TextBlock Text="Hook"/><ComboBox x:Name="link_hook" Width="190"/>
+                        <CheckBox x:Name="link_flip" Content="Flip hooks"/>
+                    </WrapPanel>
+                    <WrapPanel>
+                        <TextBlock Text="Continuous links in"/><ComboBox x:Name="link_priority" Width="330"/>
+                    </WrapPanel>
+                    <WrapPanel>
+                        <CheckBox x:Name="primary" Content="Force links through all beam junctions"
+                                  ToolTip="Overrides the choice above for these beams."/>
+                        <CheckBox x:Name="stop_cols" Content="Stop links at columns"/>
+                    </WrapPanel>
+                    <WrapPanel>
+                        <TextBlock Text="Show in active view"/><ComboBox x:Name="display" Width="170"/>
+                    </WrapPanel>
+                </StackPanel>
+            </TabItem>
 
-        <GroupBox Header="Laps">
-            <StackPanel>
-                <WrapPanel>
-                    <TextBlock Text="Lap length = "/>
-                    <ComboBox x:Name="lap_factor" IsEditable="True" Width="60"/>
-                    <TextBlock Text="x d       Supplier stock length (mm)"/>
-                    <ComboBox x:Name="stock" IsEditable="True"/>
-                </WrapPanel>
-                <TextBlock Margin="0,6,0,2" Foreground="Gray" TextWrapping="Wrap"
-                           Text="Splice zones: leave empty for the automatic rule (top bars lap in the middle third of each span, bottom bars near/over supports). Or type the client's zones as mm from the beam start face, e.g. 2000-3500, 7000-8200"/>
-                <WrapPanel>
-                    <TextBlock Text="Top zones"/><TextBox x:Name="top_zones" Width="190"/>
-                    <TextBlock Text="Bottom zones"/><TextBox x:Name="bot_zones" Width="190"/>
-                </WrapPanel>
-            </StackPanel>
-        </GroupBox>
+            <TabItem Header="Comments">
+                <StackPanel>
+                    <TextBlock Foreground="Gray" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Text="Written to each bar's Comments and Partition parameters (for schedules and tags). Leave empty to skip."/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="90"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                        <TextBlock Grid.Column="1" Text="Comments"/><TextBlock Grid.Column="2" Text="Partition"/>
+                        <TextBlock Grid.Row="1" Text="Top bars"/>
+                        <TextBox Grid.Row="1" Grid.Column="1" x:Name="top_comment" Width="200"/>
+                        <TextBox Grid.Row="1" Grid.Column="2" x:Name="top_partition" Width="160"/>
+                        <TextBlock Grid.Row="2" Text="Bottom bars"/>
+                        <TextBox Grid.Row="2" Grid.Column="1" x:Name="bot_comment" Width="200"/>
+                        <TextBox Grid.Row="2" Grid.Column="2" x:Name="bot_partition" Width="160"/>
+                        <TextBlock Grid.Row="3" Text="Links"/>
+                        <TextBox Grid.Row="3" Grid.Column="1" x:Name="link_comment" Width="200"/>
+                        <TextBox Grid.Row="3" Grid.Column="2" x:Name="link_partition" Width="160"/>
+                    </Grid>
+                </StackPanel>
+            </TabItem>
+        </TabControl>
 
-        <GroupBox>
-            <GroupBox.Header><CheckBox x:Name="links_on" Content="Links / stirrups" Margin="0"/></GroupBox.Header>
-            <StackPanel>
-                <WrapPanel>
-                    <TextBlock Text="Bar type"/><ComboBox x:Name="link_type"/>
-                    <TextBlock Text="Spacing (mm)"/><TextBox x:Name="link_spacing"/>
-                    <TextBlock Text="First link from face (mm)"/><TextBox x:Name="link_offset"/>
-                </WrapPanel>
-                <WrapPanel>
-                    <TextBlock Text="Hook"/><ComboBox x:Name="link_hook" Width="190"/>
-                    <CheckBox x:Name="link_flip" Content="Flip hooks"/>
-                </WrapPanel>
-                <WrapPanel>
-                    <TextBlock Text="Continuous links in"/><ComboBox x:Name="link_priority" Width="330"/>
-                </WrapPanel>
-                <WrapPanel>
-                    <CheckBox x:Name="primary" Content="Force links through all beam junctions"
-                              ToolTip="Normally automatic: links stop where a MAIN beam crosses (the beam that cuts this one, or the deeper one) and run through where this beam is the main one."/>
-                    <CheckBox x:Name="stop_cols" Content="Stop links at columns"/>
-                </WrapPanel>
-                <WrapPanel>
-                    <TextBlock Text="Show in active view"/><ComboBox x:Name="display" Width="170"/>
-                </WrapPanel>
-            </StackPanel>
-        </GroupBox>
-
-        <WrapPanel HorizontalAlignment="Right">
+        <WrapPanel HorizontalAlignment="Right" Margin="0,10,0,0">
             <Button Content="Cancel" Width="90" Margin="0,0,8,0" IsCancel="True" Click="cancel_click"/>
             <Button Content="Create rebar" Width="120" IsDefault="True" Click="ok_click"/>
         </WrapPanel>

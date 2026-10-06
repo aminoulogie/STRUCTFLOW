@@ -21,7 +21,7 @@ from System import Guid, String
 from System.Collections.Generic import List
 
 from Autodesk.Revit.DB import (
-    BoundingBoxIntersectsFilter, BuiltInCategory, Curve, Element,
+    BoundingBoxIntersectsFilter, BuiltInCategory, BuiltInParameter, Curve, Element,
     ElementId, ElementMulticategoryFilter, FilteredElementCollector,
     GeometryInstance, Line, Options, Outline, Solid,
     SolidCurveIntersectionOptions, SubTransaction, ViewDetailLevel, XYZ,
@@ -54,6 +54,9 @@ DEFAULTS = {
     "link_priority": "auto",
     # manual splice centres, mm from beam start face (None = automatic)
     "top_splices": None, "bot_splices": None,
+    # written to the bars' Comments / Partition parameters
+    "top_comment": "", "top_partition": "", "bot_comment": "", "bot_partition": "",
+    "link_comment": "", "link_partition": "",
 }
 
 DISPLAY_MODES = [
@@ -523,8 +526,16 @@ def apply_display(rebar, view, mode):
         rebar.SetBarHiddenStatus(view, i, i not in show)
 
 
-def _mark(el, layer):
+def _mark(el, layer, s=None):
     _set_data(el, _AUTO_MARK + "|" + layer)
+    if s is None:
+        return
+    for key, bip in (("_comment", BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS),
+                     ("_partition", BuiltInParameter.NUMBER_PARTITION_PARAM)):
+        val = (s.get(layer + key) or "").strip()
+        p = el.get_Parameter(bip)
+        if val and p is not None and not p.IsReadOnly:
+            p.Set(val)
 
 
 def delete_auto_rebar(doc, beam):
@@ -613,7 +624,7 @@ def _long_bars(doc, beam, fr, s, top, supports, made, warn):
             box = (p(a, w), fr.X * (b - a), XYZ.BasisZ * (sign * leg))
         r = create_rebar(doc, beam, RebarStyle.Standard, bt, fr.Y, curves, shape, box=box)
         set_layout(r, n, vb - va)
-        _mark(r, "top" if top else "bot")
+        _mark(r, "top" if top else "bot", s)
         made.append(r)
 
 
@@ -657,7 +668,7 @@ def _links(doc, beam, fr, s, beam_j, col_j, view, made, warn):
             acc.SetLayoutAsSingle()
         else:
             acc.SetLayoutAsMaximumSpacing(spacing, length, True, True, True)
-        _mark(r, "link")
+        _mark(r, "link", s)
         apply_display(r, view, s["display"])
         made.append(r)
 

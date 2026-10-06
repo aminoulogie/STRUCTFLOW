@@ -17,6 +17,8 @@ NUM_FIELDS = ["cover_top", "cover_bottom", "cover_side", "cover_end", "end_ext",
               "top_A", "top_C", "bot_A", "bot_C", "link_spacing", "link_offset"]
 INT_FIELDS = ["top_n", "bot_n"]
 TEXT_FIELDS = ["top_zones", "bot_zones"]
+COMMENT_FIELDS = ["top_comment", "top_partition", "bot_comment", "bot_partition",
+                  "link_comment", "link_partition"]
 COMBO_NUM = {"lap_factor": ["50", "60"], "stock": ["6000", "12000"]}
 PRIORITY = [("auto", "Automatic (beam that cuts / deeper beam is main)"),
             ("horizontal", "Horizontal beams continuous, vertical beams stop"),
@@ -51,6 +53,8 @@ class BeamRebarWindow(forms.WPFWindow):
             getattr(self, key).Text = "{:g}".format(s[key])
         for key in TEXT_FIELDS:
             getattr(self, key).Text = s[key]
+        for key in COMMENT_FIELDS:
+            getattr(self, key).Text = s.get(key) or ""
         for key, choices in COMBO_NUM.items():
             combo = getattr(self, key)
             for c in choices:
@@ -79,6 +83,8 @@ class BeamRebarWindow(forms.WPFWindow):
                         a, b = [float(x) for x in part.split("-")]
             except ValueError:
                 raise ValueError("splice zones must look like 2000-3500, 7000-8200")
+        for key in COMMENT_FIELDS:
+            s[key] = getattr(self, key).Text.strip()
         for key in ("top_type", "bot_type", "link_type"):
             s[key] = getattr(self, key).SelectedItem
         hook = self.link_hook.SelectedItem

@@ -18,6 +18,7 @@ import sf_families as sf
 import sf_graphics as sg
 import sf_preview as pv
 import sf_profiles as sp
+import sf_filters as sfl
 
 doc = revit.doc
 CURRENT = "Current model"
@@ -81,6 +82,9 @@ class TypeMakerWindow(forms.WPFWindow):
                 getattr(self, key).Items.Add(name)
         for g, _, _ in sg.GRADES:
             self.grade.Items.Add(g)
+        for _, label in sfl.SCOPES:
+            self.filter_scope.Items.Add(label)
+        self.filter_scope.SelectedIndex = 0
 
     @property
     def kind(self):
@@ -262,6 +266,10 @@ class TypeMakerWindow(forms.WPFWindow):
             return
         self.edit_changed(None, None)
 
+    def _family_name(self):
+        base = self.choices[self.base.SelectedItem]
+        return base.FamilyName if self.kind == "host" else base.Name
+
     def selected_types(self):
         return [self.type_items[n] for n in self.types_list.SelectedItems if n in self.type_items]
 
@@ -273,6 +281,9 @@ class TypeMakerWindow(forms.WPFWindow):
         t = types[0]
         mat = sg.material_of(doc, t)
         g, notes = sg.read_with_view(doc, self.key, mat, revit.active_view)
+        g, fname = sfl.read_look(doc, g, revit.active_view, self._family_name(), sf.br.ename(t))
+        if fname:
+            notes.append("filter '%s'" % fname)
         self._set_graphics(g)
         self._set_material(sg.read_material(doc, mat, self.key))
         self.preset.SelectedIndex = -1
@@ -298,6 +309,10 @@ class TypeMakerWindow(forms.WPFWindow):
                 t = base if self.kind == "host" else sf.first_symbol(doc, base)
                 mat = sg.material_of(doc, t) if t is not None else None
             g, notes = sg.read_with_view(doc, self.key, mat, revit.active_view)
+            if self.base.SelectedItem is not None:
+                g, fname = sfl.read_look(doc, g, revit.active_view, self._family_name())
+                if fname:
+                    notes.append("filter '%s'" % fname)
             self._set_graphics(g)
             self.preset_note.Text = ("Loaded from what you see now: " + ", ".join(notes) +
                                      ". Pick EPL or another preset to change it.")
@@ -379,6 +394,10 @@ class TypeMakerWindow(forms.WPFWindow):
             "g": g, "m": m, "mats": self.materials(m), "per_material": bool(self.per_material.IsChecked),
             "apply_styles": bool(self.apply_styles.IsChecked),
             "apply_view": bool(self.apply_view.IsChecked),
+            "apply_filter": bool(self.apply_filter.IsChecked),
+            "scope": sfl.SCOPES[max(self.filter_scope.SelectedIndex, 0)][0],
+            "mat_graphics": bool(self.mat_graphics.IsChecked),
+            "family_name": self._family_name(),
             "targets": self.selected_types() if self.edit_mode.IsChecked else [],
             "apply_material": bool(self.apply_material.IsChecked),
         }
@@ -418,20 +437,32 @@ if r:
                 entries = [((name or sf.type_name(r["pattern"].replace("{m}", ""), size)).strip()
                             + " " + mm["short"], size) for name, size in r["entries"]]
                 made = make(entries)
-                mat = sg.apply_material(doc, r["key"], r["g"], mm)
+                mat = sg.apply_material(doc, r["key"], r["g"] if r["mat_graphics"] else None, mm)
                 n = sum(1 for e in made if sg.assign_material(doc, e, mat))
                 log.append("material '%s' set on %d type(s)" % (mat.Name, n))
         else:
             touched = make(r["entries"])
             first = None
             for mm in mats:
-                mat = sg.apply_material(doc, r["key"], r["g"], mm)
+                mat = sg.apply_material(doc, r["key"], r["g"] if r["mat_graphics"] else None, mm)
                 first = first or mat
                 log.append("material '%s' created / updated" % mat.Name)
             if first is not None:
                 targets = r["targets"] or touched
                 n = sum(1 for e in targets if sg.assign_material(doc, e, first))
                 log.append("material '%s' set on %d type(s)" % (first.Name, n))
+        if r["apply_filter"]:
+            # the look by family / type name, not by material
+            if r["targets"]:
+                names = [sf.br.ename(x) for x in r["targets"]]
+            elif r["kind"] == "host":
+                names = [name or sf.type_name(r["pattern"], size) for name, size in r["entries"]]
+            else:
+                names = []  # the whole family
+            views = sfl.target_views(doc, r["scope"], revit.active_view)
+            nf, nv = sfl.apply(doc, r["key"], r["g"], r["family_name"], names, views)
+            log.append("look applied with %d filter(s) (%s) in %d view template(s)/view(s)"
+                       % (nf, ", ".join(names) if names else "whole family " + r["family_name"], nv))
         t.Commit()
         sg.save(r["key"], r["g"], r["m"])
     except Exception as ex:

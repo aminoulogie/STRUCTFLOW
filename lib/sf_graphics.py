@@ -286,25 +286,43 @@ def find_material(doc, name):
 
 
 def apply_material(doc, key, g, m):
-    """Create or update the material: graphics, identity and structural asset."""
+    """Create or update the material: identity and structural asset. Its
+    graphics are written only when g is given - normally the look lives in
+    the family / type view filters (sf_filters), not in the material."""
     mat = find_material(doc, m["name"])
     if mat is None:
         mat = doc.GetElement(Material.Create(doc, m["name"]))
-    fps, mps = fill_patterns(doc), fill_patterns(doc, FillPatternTarget.Model)
     mat.MaterialClass = "Concrete"
-    mat.CutForegroundPatternId = _pattern_id(fps, g["cut_fill"])
-    mat.CutForegroundPatternColor = _rcolor(g["cut_fill_colour"])
-    mat.SurfaceForegroundPatternId = _pattern_id(mps, g["surface_fill"])
-    mat.SurfaceForegroundPatternColor = _rcolor(g["surface_colour"])
-    mat.Color = _rcolor(g["shade"])
-    mat.Transparency = int(g["transparency"])
+    if g is not None:
+        fps, mps = fill_patterns(doc), fill_patterns(doc, FillPatternTarget.Model)
+        mat.CutForegroundPatternId = _pattern_id(fps, g["cut_fill"])
+        mat.CutForegroundPatternColor = _rcolor(g["cut_fill_colour"])
+        mat.SurfaceForegroundPatternId = _pattern_id(mps, g["surface_fill"])
+        mat.SurfaceForegroundPatternColor = _rcolor(g["surface_colour"])
+        mat.Color = _rcolor(g["shade"])
+        mat.Transparency = int(g["transparency"])
     for bip, val in ((BuiltInParameter.ALL_MODEL_DESCRIPTION, m.get("description")),
                      (BuiltInParameter.KEYNOTE_PARAM, m.get("keynote"))):
         p = mat.get_Parameter(bip)
         if val and p is not None and not p.IsReadOnly:
             p.Set(val)
 
-    asset = StructuralAsset(m["name"], StructuralAssetClass.Concrete)
+    # Revit refuses two property sets with the same name, so a material
+    # StructFlow made before gets its own set updated in place
+    asset_name = "StructFlow " + m["name"]
+    pse = None
+    if mat.StructuralAssetId != ElementId.InvalidElementId:
+        current = doc.GetElement(mat.StructuralAssetId)
+        if current is not None and current.Name == asset_name:
+            pse = current
+    if pse is None:
+        taken = set(e.Name for e in FilteredElementCollector(doc).OfClass(PropertySetElement))
+        i = 2
+        base = asset_name
+        while asset_name in taken:
+            asset_name = "%s (%d)" % (base, i)
+            i += 1
+    asset = pse.GetStructuralAsset() if pse is not None else StructuralAsset(asset_name, StructuralAssetClass.Concrete)
     asset.Behavior = StructuralBehavior.Isotropic
     asset.SubClass = "Concrete"
     asset.Density = UnitUtils.ConvertToInternalUnits(float(m["density"]), UnitTypeId.KilogramsPerCubicMeter)
@@ -313,8 +331,11 @@ def apply_material(doc, key, g, m):
     asset.SetPoissonRatio(float(m["poisson"]))
     asset.SetThermalExpansionCoefficient(
         UnitUtils.ConvertToInternalUnits(float(m["thermal"]) * 1e-6, UnitTypeId.InverseDegreesCelsius))
-    pse = PropertySetElement.Create(doc, asset)
-    mat.SetMaterialAspectByPropertySet(MaterialAspect.Structural, pse.Id)
+    if pse is not None:
+        pse.SetStructuralAsset(asset)
+    else:
+        pse = PropertySetElement.Create(doc, asset)
+        mat.SetMaterialAspectByPropertySet(MaterialAspect.Structural, pse.Id)
     return mat
 
 

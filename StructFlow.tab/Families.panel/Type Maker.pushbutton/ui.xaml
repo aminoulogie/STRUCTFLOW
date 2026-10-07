@@ -88,8 +88,16 @@
                                     </WrapPanel>
                                 </StackPanel>
                             </GroupBox>
-                            <CheckBox x:Name="apply_styles" Content="Apply the line settings to Object Styles (all elements of this category)" IsChecked="True"/>
-                            <CheckBox x:Name="apply_view" Content="Also write them into the active view's template overrides (Visibility/Graphics)"/>
+                            <GroupBox Header="Where the look goes">
+                                <StackPanel>
+                                    <CheckBox x:Name="apply_filter" IsChecked="True"
+                                              Content="This family - or only the types selected in the Sizes list - by Family / Type name (view filter)"/>
+                                    <WrapPanel Margin="20,0,0,0"><TextBlock Text="in"/><ComboBox x:Name="filter_scope" Width="330"/></WrapPanel>
+                                    <CheckBox x:Name="apply_styles" Content="Whole category (Object Styles: every element of this category)"/>
+                                    <CheckBox x:Name="apply_view" Content="Whole category in the active view's template (Visibility/Graphics)"/>
+                                    <CheckBox x:Name="mat_graphics" Content="Also store the look in the material (only if you want it to travel with the material)"/>
+                                </StackPanel>
+                            </GroupBox>
                             <TextBlock Foreground="Gray" Text="Colours: a name (Black, Pink, Concrete...) or R,G,B such as 255,0,128."/>
                         </StackPanel>
                     </TabItem>
@@ -113,7 +121,7 @@
                             <WrapPanel><TextBlock Text="Thermal expansion (x10^-6 /C)" Width="160"/><TextBox x:Name="thermal" Width="70"/></WrapPanel>
                             <WrapPanel><TextBlock Text="Description" Width="160"/><TextBox x:Name="description" Width="380"/></WrapPanel>
                             <WrapPanel><TextBlock Text="Keynote" Width="160"/><TextBox x:Name="keynote" Width="120"/></WrapPanel>
-                            <CheckBox x:Name="apply_material" Content="Create / update this material (graphics + structural properties) and assign it to the types"
+                            <CheckBox x:Name="apply_material" Content="Create / update the material (structural properties) and assign it to the types"
                                       IsChecked="True"/>
                             <TextBlock Foreground="Gray" TextWrapping="Wrap" Margin="0,6,0,0"
                                        Text="Fck and Ecm follow BS EN 1992-1-1 Table 3.1 when you pick a grade. Density 2500 kg/m3 = 25 kN/m3 reinforced concrete (BS EN 1991-1-1)."/>

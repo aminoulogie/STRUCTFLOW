@@ -8,7 +8,15 @@ __title__ = "Export\nFamilies"
 import os
 
 from pyrevit import forms, revit, script
-from System.Windows.Controls import CheckBox
+from System.Windows.Controls import CheckBox, TextBlock
+
+
+def label(text):
+    """Checkbox caption shown as typed (a plain string would hide the first
+    underscore: WPF reads it as a keyboard shortcut marker)."""
+    tb = TextBlock()
+    tb.Text = text
+    return tb
 
 import sf_families as sf
 import sf_graphics as sg
@@ -78,7 +86,7 @@ class ExportWindow(forms.WPFWindow):
         self.families.Items.Clear()
         for f in self._visible():
             cb = CheckBox()
-            cb.Content = "%s   [%s]" % (f.Name, f.FamilyCategory.Name if f.FamilyCategory else "?")
+            cb.Content = label("%s   [%s]" % (f.Name, f.FamilyCategory.Name if f.FamilyCategory else "?"))
             cb.Tag = f
             cb.IsChecked = f.Id in self.checked
             cb.Click += self._family_ticked
@@ -117,7 +125,8 @@ class ExportWindow(forms.WPFWindow):
         lst.Items.Clear()
         for name in self._type_names(f):
             cb = CheckBox()
-            cb.Content = name
+            cb.Content = label(name)
+            cb.Tag = name
             cb.IsChecked = name in self.types[f.Id]
             cb.Click += self._type_ticked
             lst.Items.Add(cb)
@@ -126,7 +135,7 @@ class ExportWindow(forms.WPFWindow):
         f = self.current
         if f is None:
             return
-        name = str(sender.Content)
+        name = sender.Tag
         if sender.IsChecked:
             self.types[f.Id].add(name)
             self.checked.add(f.Id)

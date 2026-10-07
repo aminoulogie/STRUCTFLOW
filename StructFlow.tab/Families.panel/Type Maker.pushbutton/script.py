@@ -1,82 +1,258 @@
 # -*- coding: utf-8 -*-
-"""Make many sizes at once: column / beam types from a list like
-300x300, 300x400 ... or floor types from thicknesses like 150, 200."""
+"""Make or edit column / beam / slab / wall types from a size list, and
+set how they look (line styles, cut / surface patterns, 3D colour) and
+their concrete material, with a live preview."""
 __title__ = "Type\nMaker"
 
 import os
 
-from pyrevit import forms, revit, script
-from Autodesk.Revit.DB import Transaction
+from pyrevit import forms, revit
+from Autodesk.Revit.DB import FillPatternTarget, Transaction
+from System import TimeSpan
 from System.Windows import Visibility
+from System.Windows.Threading import DispatcherTimer
 
 import sf_families as sf
+import sf_graphics as sg
+import sf_preview as pv
 
 doc = revit.doc
+CURRENT = "Current model"
+GFIELDS_COMBO = ["cut_w", "proj_w", "proj_pattern", "hidden_pattern", "hidden_w", "cut_fill", "surface_fill"]
+GFIELDS_COLOUR = ["colour", "cut_fill_colour", "surface_colour", "shade"]
+MFIELDS = ["fck", "ecm", "density", "poisson", "thermal"]
+NOTES = {
+    "EPL (recommended UK)": "Print-first: black lines, heavy cut lines on columns and walls, solid grey cut "
+                            "fill (clean at 1:100, rebar reads well at 1:20), no surface patterns, soft "
+                            "concrete greys in 3D, beams below slabs dashed.",
+    "Colour coordination": "One colour per element type for model reviews and coordination.",
+    "Classic concrete hatch": "Traditional concrete stipple in cut, all black.",
+    CURRENT: "What the model uses now.",
+}
 
 
 class TypeMakerWindow(forms.WPFWindow):
     def __init__(self):
         forms.WPFWindow.__init__(self, os.path.join(os.path.dirname(__file__), "ui.xaml"))
         self.result = None
-        for label, _ in sf.CATEGORIES:
+        self.key = None
+        self.choices = {}
+        self.state = {}
+        saved = sg.load_saved()
+        for key, _, _, _ in sf.CATEGORIES:
+            entry = saved.get(key) or {}
+            self.state[key] = {"g": entry.get("graphics") or dict(sg.PRESETS["EPL (recommended UK)"][key]),
+                               "m": entry.get("material") or sg.default_material(key)}
+        self._fill_static_lists()
+        for _, label, _, _ in sf.CATEGORIES:
             self.category.Items.Add(label)
         self.category.SelectedIndex = 0
+        self._last = None
+        self.timer = DispatcherTimer()
+        self.timer.Interval = TimeSpan.FromMilliseconds(300)
+        self.timer.Tick += self._tick
+        self.timer.Start()
+        self.Closed += lambda s, e: self.timer.Stop()
+
+    # ------------------------------------------------------------ lists
+    def _fill_static_lists(self):
+        for name in sg.PRESETS:
+            self.preset.Items.Add(name)
+        self.preset.Items.Add(CURRENT)
+        for w in range(1, 17):
+            for key in ("cut_w", "proj_w", "hidden_w"):
+                getattr(self, key).Items.Add(str(w))
+        for name in sorted(sg.line_patterns(doc)):
+            self.proj_pattern.Items.Add(name)
+            self.hidden_pattern.Items.Add(name)
+        self.cut_fill.Items.Add("None")
+        for name in sorted(sg.fill_patterns(doc)):
+            self.cut_fill.Items.Add(name)
+        self.surface_fill.Items.Add("None")
+        for name in sorted(sg.fill_patterns(doc, FillPatternTarget.Model)):
+            self.surface_fill.Items.Add(name)
+        for key in GFIELDS_COLOUR:
+            for name, _ in sg.NAMED_COLOURS:
+                getattr(self, key).Items.Add(name)
+        for g, _, _ in sg.GRADES:
+            self.grade.Items.Add(g)
 
     @property
-    def is_floor(self):
-        return self.category.SelectedIndex == 2
+    def kind(self):
+        return sf.CATEGORIES[self.category.SelectedIndex][3]
 
+    # ------------------------------------------------- graphics <-> UI
+    def _set_graphics(self, g):
+        for key in GFIELDS_COMBO:
+            combo, val = getattr(self, key), str(g[key])
+            if val not in list(combo.Items):
+                # loose match for pattern names such as "Concrete [Drafting]"
+                match = [i for i in combo.Items if val.lower() in str(i).lower()]
+                val = match[0] if match else (combo.Items[0] if combo.Items.Count else val)
+            combo.SelectedItem = val
+        for key in GFIELDS_COLOUR:
+            getattr(self, key).Text = sg.colour_label(g[key])
+        self.transparency.Value = float(g["transparency"])
+
+    def _get_graphics(self):
+        g = {}
+        for key in GFIELDS_COMBO:
+            g[key] = str(getattr(self, key).SelectedItem or "")
+        for key in ("cut_w", "proj_w", "hidden_w"):
+            g[key] = int(g[key] or 1)
+        for key in GFIELDS_COLOUR:
+            g[key] = "%d,%d,%d" % tuple(sg.parse_rgb(getattr(self, key).Text))
+        g["transparency"] = int(self.transparency.Value)
+        return g
+
+    def _set_material(self, m):
+        self.mat_name.Text = m["name"]
+        self.grade.SelectedItem = m["grade"]
+        for key in MFIELDS:
+            getattr(self, key).Text = "%g" % float(m[key])
+        self.description.Text = m.get("description", "")
+        self.keynote.Text = m.get("keynote", "")
+
+    def _get_material(self):
+        m = {"name": self.mat_name.Text.strip(), "grade": str(self.grade.SelectedItem or ""),
+             "description": self.description.Text.strip(), "keynote": self.keynote.Text.strip()}
+        for key in MFIELDS:
+            m[key] = float(getattr(self, key).Text)
+        if not m["name"]:
+            raise ValueError("give the material a name")
+        return m
+
+    def _store(self):
+        if self.key is None:
+            return
+        try:
+            self.state[self.key]["g"] = self._get_graphics()
+        except Exception:
+            pass
+        try:
+            self.state[self.key]["m"] = self._get_material()
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------ events
     def category_changed(self, sender, args):
-        bic = sf.CATEGORIES[self.category.SelectedIndex][1]
+        self._store()
+        key, label, bic, kind = sf.CATEGORIES[self.category.SelectedIndex]
+        self.key = key
         self.base.Items.Clear()
-        if self.is_floor:
-            self.choices = sf.floor_types(doc)
-            self.base_label.Text = "Copy from floor type"
+        if kind == "host":
+            self.choices = sf.host_types(doc, key)
+            self.base_label.Text = "Copy from %s type" % ("slab" if key == "floors" else "wall")
             self.param_panel.Visibility = Visibility.Collapsed
-            self.pattern.Text = "Slab {t}mm"
-            self.pattern_hint.Text = "{t} = thickness"
-            self.sizes_hint.Text = ("Total thicknesses in mm, separated by commas or new lines "
-                                    "(the structural layer takes up the difference):  150, 200, 250")
+            self.pattern.Text = "Slab {t}mm" if key == "floors" else "Wall {t}mm"
+            self.pattern_hint.Text = "{t} = total thickness"
+            self.sizes_hint.Text = ("Total thicknesses in mm, separated by commas or new lines; "
+                                    "name one with 'Name: 200'.  e.g.  150, 200, 250, 300")
         else:
             self.choices = sf.families_of(doc, bic)
             self.base_label.Text = "Family"
             self.param_panel.Visibility = Visibility.Visible
             self.pattern.Text = "{b}x{h}"
             self.pattern_hint.Text = "{b} = width, {h} = depth"
-            self.sizes_hint.Text = ("Sizes in mm as width x depth, separated by commas or new lines:  "
-                                    "300x300, 300x400, 400x400, 400x600")
+            self.sizes_hint.Text = ("Sizes in mm as width x depth, separated by commas or new lines; "
+                                    "name one with 'C1: 300x400'.  e.g.  300x300, 300x450, 400x400")
         for name in sorted(self.choices):
             self.base.Items.Add(name)
         if self.base.Items.Count:
             self.base.SelectedIndex = 0
+        self._set_graphics(self.state[key]["g"])
+        self._set_material(self.state[key]["m"])
+        self.preset.SelectedIndex = -1
+        self.preset_note.Text = ""
+        self.edit_mode.IsChecked = False
 
     def base_changed(self, sender, args):
-        if self.is_floor or self.base.SelectedItem is None:
+        if self.base.SelectedItem is None:
             return
-        sym = sf.first_symbol(doc, self.choices[self.base.SelectedItem])
-        names = sf.length_params(sym) if sym else []
-        for combo, wanted in ((self.p_w, ["b", "width", "w"]), (self.p_h, ["h", "depth", "d", "height"])):
-            combo.Items.Clear()
-            for n in names:
-                combo.Items.Add(n)
-            combo.SelectedItem = sf.guess(names, wanted)
+        if self.kind == "family":
+            sym = sf.first_symbol(doc, self.choices[self.base.SelectedItem])
+            names = sf.length_params(sym) if sym else []
+            for combo, wanted in ((self.p_w, ["b", "width", "w"]), (self.p_h, ["h", "depth", "d", "height"])):
+                combo.Items.Clear()
+                for n in names:
+                    combo.Items.Add(n)
+                combo.SelectedItem = sf.guess(names, wanted)
+        if self.edit_mode.IsChecked:
+            self.edit_changed(None, None)
 
+    def edit_changed(self, sender, args):
+        if not self.edit_mode.IsChecked or self.base.SelectedItem is None:
+            return
+        base = self.choices[self.base.SelectedItem]
+        self.sizes.Text = sf.describe_existing(doc, self.key, base, self.p_w.SelectedItem, self.p_h.SelectedItem)
+
+    def preset_changed(self, sender, args):
+        name = self.preset.SelectedItem
+        if not name:
+            return
+        self.preset_note.Text = NOTES.get(name, "")
+        if name == CURRENT:
+            mat = None
+            if self.base.SelectedItem is not None:
+                base = self.choices[self.base.SelectedItem]
+                t = base if self.kind == "host" else sf.first_symbol(doc, base)
+                mat = sg.material_of(doc, t) if t is not None else None
+            self._set_graphics(sg.read_current(doc, self.key, mat))
+        else:
+            self._set_graphics(sg.PRESETS[name][self.key])
+
+    def grade_changed(self, sender, args):
+        grade = self.grade.SelectedItem
+        for g, fck, ecm in sg.GRADES:
+            if g == grade:
+                self.fck.Text, self.ecm.Text = "%g" % fck, "%g" % ecm
+                # keep the default naming in step with the grade
+                name = self.mat_name.Text
+                for other, _, _ in sg.GRADES:
+                    if other in name:
+                        self.mat_name.Text = name.replace(other, g)
+                        self.description.Text = self.description.Text.replace(other, g)
+                        break
+
+    # ----------------------------------------------------------- preview
+    def _preview_size(self):
+        try:
+            entries = sf.parse_sizes(self.sizes.Text, self.kind == "family")
+            return entries[0][1]
+        except Exception:
+            return (300.0, 450.0) if self.kind == "family" else (200.0,)
+
+    def _tick(self, sender, args):
+        try:
+            g = self._get_graphics()
+        except Exception:
+            return  # half-typed colour: keep the last drawing
+        snap = (self.key, repr(self._preview_size()), repr(sorted(g.items())))
+        if snap != self._last:
+            self._last = snap
+            pv.draw(self.preview, self.key, self._preview_size(), g)
+
+    # --------------------------------------------------------------- run
     def ok_click(self, sender, args):
         if self.base.SelectedItem is None:
-            forms.alert("Nothing to copy from: load a family of this category first.")
+            forms.alert("Nothing to copy from: load a family / type of this category first.")
             return
         try:
-            sizes = sf.parse_sizes(self.sizes.Text, not self.is_floor)
+            entries = sf.parse_sizes(self.sizes.Text, self.kind == "family")
+            g = self._get_graphics()
+            m = self._get_material()
         except ValueError as ex:
             forms.alert(str(ex))
             return
-        if not self.is_floor and (self.p_w.SelectedItem is None or self.p_h.SelectedItem is None):
+        if self.kind == "family" and (self.p_w.SelectedItem is None or self.p_h.SelectedItem is None):
             forms.alert("Pick the width and depth parameters.")
             return
         self.result = {
-            "floor": self.is_floor, "base": self.choices[self.base.SelectedItem],
-            "pattern": self.pattern.Text, "sizes": sizes, "update": bool(self.update.IsChecked),
+            "key": self.key, "kind": self.kind, "base": self.choices[self.base.SelectedItem],
+            "pattern": self.pattern.Text, "entries": entries, "update": bool(self.update.IsChecked),
             "p_w": self.p_w.SelectedItem, "p_h": self.p_h.SelectedItem,
+            "g": g, "m": m, "apply_styles": bool(self.apply_styles.IsChecked),
+            "apply_material": bool(self.apply_material.IsChecked),
         }
         self.Close()
 
@@ -88,17 +264,25 @@ win = TypeMakerWindow()
 win.ShowDialog()
 r = win.result
 if r:
-    out = script.get_output()
     log = []
     t = Transaction(doc, "StructFlow Type Maker")
     t.Start()
     try:
-        if r["floor"]:
-            sf.make_floor_types(doc, r["base"], r["pattern"], r["sizes"], r["update"], log.append)
+        if r["kind"] == "host":
+            touched = sf.make_host_types(doc, r["key"], r["base"], r["pattern"], r["entries"],
+                                         r["update"], log.append)
         else:
-            sf.make_family_types(doc, r["base"], r["pattern"], r["sizes"], r["p_w"], r["p_h"],
-                                 r["update"], log.append)
+            touched = sf.make_family_types(doc, r["base"], r["pattern"], r["entries"],
+                                           r["p_w"], r["p_h"], r["update"], log.append)
+        if r["apply_styles"]:
+            sg.apply_object_styles(doc, r["key"], r["g"])
+            log.append("object styles updated for all %s" % sg.CATS[r["key"]][0].lower())
+        if r["apply_material"]:
+            mat = sg.apply_material(doc, r["key"], r["g"], r["m"])
+            n = sum(1 for e in touched if sg.assign_material(doc, e, mat))
+            log.append("material '%s' set on %d type(s)" % (mat.Name, n))
         t.Commit()
+        sg.save(r["key"], r["g"], r["m"])
     except Exception as ex:
         t.RollBack()
         log.append("STOPPED, nothing was changed: %s" % ex)

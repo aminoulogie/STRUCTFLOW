@@ -1,22 +1,24 @@
 # -*- coding: utf-8 -*-
-"""StructFlow family helpers: make many types from a size list (columns,
-beams, floors) and export loaded families to a folder."""
+"""StructFlow family helpers: make or edit many types from a size list
+(columns, beams, slabs, walls) and export loaded families to a folder."""
 import os
 import re
 
 from Autodesk.Revit.DB import (
-    BuiltInCategory, Family, FamilySymbol, FilteredElementCollector,
-    FloorType, SaveAsOptions, SpecTypeId, StorageType,
+    BuiltInCategory, Family, FilteredElementCollector, FloorType,
+    SaveAsOptions, SpecTypeId, StorageType, WallKind, WallType,
 )
 
 import sf_beamrebar as br
 
 MM = br.MM
 
+# (key, label, category, kind): kind 'family' = loadable b x h, 'host' = thickness
 CATEGORIES = [
-    ("Structural columns", BuiltInCategory.OST_StructuralColumns),
-    ("Beams (structural framing)", BuiltInCategory.OST_StructuralFraming),
-    ("Floors", BuiltInCategory.OST_Floors),
+    ("columns", "Structural columns", BuiltInCategory.OST_StructuralColumns, "family"),
+    ("beams", "Beams (structural framing)", BuiltInCategory.OST_StructuralFraming, "family"),
+    ("floors", "Slabs (floors)", BuiltInCategory.OST_Floors, "host"),
+    ("walls", "Walls", BuiltInCategory.OST_Walls, "host"),
 ]
 
 
@@ -27,13 +29,20 @@ def families_of(doc, bic):
                 and not f.IsInPlace)
 
 
-def floor_types(doc):
-    return dict((br.ename(t), t) for t in FilteredElementCollector(doc).OfClass(FloorType))
+def host_types(doc, key):
+    if key == "floors":
+        return dict((br.ename(t), t) for t in FilteredElementCollector(doc).OfClass(FloorType))
+    return dict((br.ename(t), t) for t in FilteredElementCollector(doc).OfClass(WallType)
+                if t.Kind == WallKind.Basic)
 
 
 def first_symbol(doc, family):
     ids = list(family.GetFamilySymbolIds())
     return doc.GetElement(ids[0]) if ids else None
+
+
+def symbols_of(doc, family):
+    return [doc.GetElement(i) for i in family.GetFamilySymbolIds()]
 
 
 def length_params(symbol):
@@ -60,25 +69,33 @@ def guess(names, wanted):
 
 
 def parse_sizes(text, two):
-    """'300x300, 300x400' -> [(300, 300), (300, 400)];  '150, 200' -> [(150,), (200,)]"""
+    """Entries separated by commas or new lines, optionally named:
+    '300x300, C1: 300x400'  ->  [(None, (300, 300)), ('C1', (300, 400))]
+    '150, Slab A: 200'       ->  [(None, (150,)), ('Slab A', (200,))]"""
     out = []
     for tok in re.split(r"[,;\n]+", text):
+        if not tok.strip():
+            continue
+        name = None
+        if ":" in tok:
+            name, tok = tok.rsplit(":", 1)
+            name = name.strip() or None
         nums = re.findall(r"\d+(?:\.\d+)?", tok)
         if not nums:
             continue
         if two:
             if len(nums) < 2:
                 raise ValueError("'%s' needs two numbers, e.g. 300x600" % tok.strip())
-            out.append((float(nums[0]), float(nums[1])))
+            out.append((name, (float(nums[0]), float(nums[1]))))
         else:
-            out.append((float(nums[0]),))
+            out.append((name, (float(nums[0]),)))
     if not out:
         raise ValueError("type at least one size")
     return out
 
 
 def _fmt(n):
-    return ("%g" % n)
+    return "%g" % n
 
 
 def type_name(pattern, size):
@@ -88,53 +105,79 @@ def type_name(pattern, size):
     return name
 
 
-def make_family_types(doc, family, pattern, sizes, p_w, p_h, update, log):
+def thickness_of(host_type):
+    cs = host_type.GetCompoundStructure()
+    return sum(cs.GetLayerWidth(i) for i in range(cs.LayerCount)) / MM if cs else 0.0
+
+
+def describe_existing(doc, key, base, p_w=None, p_h=None):
+    """Existing types as editable 'Name: size' lines."""
+    lines = []
+    if key in ("floors", "walls"):
+        for name, t in sorted(host_types(doc, key).items()):
+            lines.append("%s: %g" % (name, round(thickness_of(t), 1)))
+    else:
+        for sym in sorted(symbols_of(doc, base), key=lambda s: br.ename(s)):
+            pw, ph = sym.LookupParameter(p_w), sym.LookupParameter(p_h)
+            if pw is None or ph is None:
+                continue
+            lines.append("%s: %gx%g" % (br.ename(sym), round(pw.AsDouble() / MM, 1),
+                                        round(ph.AsDouble() / MM, 1)))
+    return "\n".join(lines)
+
+
+def make_family_types(doc, family, pattern, entries, p_w, p_h, update, log):
     base = first_symbol(doc, family)
-    existing = dict((br.ename(doc.GetElement(i)), doc.GetElement(i)) for i in family.GetFamilySymbolIds())
-    for size in sizes:
-        name = type_name(pattern, size)
+    existing = dict((br.ename(s), s) for s in symbols_of(doc, family))
+    touched = []
+    for name, size in entries:
+        name = name or type_name(pattern, size)
         sym = existing.get(name)
         if sym is not None and not update:
             log("skipped %s (exists)" % name)
             continue
+        verb = "updated" if sym is not None else "created"
         if sym is None:
             sym = base.Duplicate(name)
             existing[name] = sym
-            verb = "created"
-        else:
-            verb = "updated"
         for pname, val in ((p_w, size[0]), (p_h, size[1])):
             p = sym.LookupParameter(pname)
             if p is None or p.IsReadOnly:
                 raise ValueError("type parameter '%s' not found or read-only" % pname)
             p.Set(val * MM)
+        touched.append(sym)
         log("%s %s" % (verb, name))
+    return touched
 
 
-def make_floor_types(doc, base, pattern, sizes, update, log):
-    existing = floor_types(doc)
-    for size in sizes:
-        name = type_name(pattern, size)
-        ft = existing.get(name)
-        if ft is not None and not update:
+def make_host_types(doc, key, base, pattern, entries, update, log):
+    """Slab / wall types: the structural layer takes up whatever the
+    finish layers leave of the total thickness."""
+    existing = host_types(doc, key)
+    touched = []
+    for name, size in entries:
+        name = name or type_name(pattern, size)
+        t = existing.get(name)
+        if t is not None and not update:
             log("skipped %s (exists)" % name)
             continue
-        verb = "updated" if ft is not None else "created"
-        if ft is None:
-            ft = base.Duplicate(name)
-            existing[name] = ft
-        cs = ft.GetCompoundStructure()
+        verb = "updated" if t is not None else "created"
+        if t is None:
+            t = base.Duplicate(name)
+            existing[name] = t
+        cs = t.GetCompoundStructure()
         idx = cs.StructuralMaterialIndex
         if idx < 0:
             idx = [i for i in range(cs.LayerCount) if cs.IsCoreLayer(i)][0]
-        # total thickness = size: the structural layer takes what the other layers leave
         others = sum(cs.GetLayerWidth(i) for i in range(cs.LayerCount) if i != idx)
         width = size[0] * MM - others
         if width <= 0:
             raise ValueError("%s: the finishes are thicker than %g mm" % (name, size[0]))
         cs.SetLayerWidth(idx, width)
-        ft.SetCompoundStructure(cs)
+        t.SetCompoundStructure(cs)
+        touched.append(t)
         log("%s %s" % (verb, name))
+    return touched
 
 
 # ---------------------------------------------------------------- export

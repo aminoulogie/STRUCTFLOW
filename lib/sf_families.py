@@ -231,3 +231,87 @@ def export_families(doc, families, folder, by_category, overwrite, log):
             if fdoc is not None:
                 fdoc.Close(False)
     return done
+
+
+# ----------------------------------------------------------- EPL library
+LIBRARY = os.path.join(os.path.dirname(__file__), "epl_library.json")
+
+
+def load_library():
+    import json
+    with open(LIBRARY) as f:
+        return json.load(f)
+
+
+def plan_library(doc, lib):
+    """Match the model's families to the EPL standard.
+    Returns (planned [(family, rel_path)], unmapped [family], missing [old name],
+    to_delete [family])."""
+    by_new = dict((rel.split("\\")[-1], rel) for rel in lib["map"].values())
+    planned, unmapped, to_delete, seen = [], [], [], set()
+    for cat, fams in exportable_families(doc).items():
+        for f in fams:
+            name = f.Name
+            if name in lib["map"]:
+                planned.append((f, lib["map"][name]))
+                seen.add(name)
+            elif name in by_new:  # already renamed to its EPL name
+                planned.append((f, by_new[name]))
+                seen.update(k for k, v in lib["map"].items() if v == by_new[name])
+            elif re.match(r"^\d{2}$", name):  # BS 8666 rebar shape keeps its code
+                planned.append((f, lib["rebar_shape_folder"] + "\\" + name))
+            elif name in lib["delete"]:
+                to_delete.append(f)
+            elif name not in lib["system"]:
+                unmapped.append(f)
+    missing = sorted(k for k in lib["map"] if k not in seen)
+    planned.sort(key=lambda p: p[1])
+    return planned, unmapped, missing, to_delete
+
+
+def export_library(doc, planned, root, log):
+    """Save each family as root/rel_path.rfa (outside a transaction)."""
+    done = 0
+    for f, rel in planned:
+        path = os.path.join(root, rel + ".rfa")
+        folder = os.path.dirname(path)
+        if not os.path.isdir(folder):
+            os.makedirs(folder)
+        fdoc = None
+        try:
+            fdoc = doc.EditFamily(f)
+            opts = SaveAsOptions()
+            opts.OverwriteExistingFile = True
+            opts.MaximumBackups = 1
+            fdoc.SaveAs(path, opts)
+            done += 1
+            log("saved   %s" % rel)
+            stem = os.path.basename(rel)
+            for fn in os.listdir(folder):
+                if re.match(re.escape(stem) + r"\.\d{4}\.rfa$", fn):
+                    os.remove(os.path.join(folder, fn))
+        except Exception as ex:
+            log("FAILED  %s (%s): %s" % (rel, f.Name, br._err(ex)))
+        finally:
+            if fdoc is not None:
+                fdoc.Close(False)
+    return done
+
+
+def rename_to_library(doc, planned, log):
+    """Rename families in the model to their EPL names (inside a transaction)."""
+    taken = set(f.Name for fams in exportable_families(doc).values() for f in fams)
+    n = 0
+    for f, rel in planned:
+        new = rel.split("\\")[-1]
+        if f.Name == new:
+            continue
+        if new in taken:
+            log("not renamed %s: '%s' already exists" % (f.Name, new))
+            continue
+        old = f.Name
+        f.Name = new
+        taken.add(new)
+        n += 1
+        log("renamed %s -> %s" % (old, new))
+    return n

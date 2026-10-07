@@ -1,0 +1,90 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="StructFlow - Export Families" Width="900" Height="640"
+        WindowStartupLocation="CenterScreen" FontSize="12">
+    <Window.Resources>
+        <Style TargetType="TextBlock"><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="0,0,6,0"/></Style>
+        <Style TargetType="Button"><Setter Property="Margin" Value="0,4,6,0"/><Setter Property="Padding" Value="10,2"/></Style>
+        <Style TargetType="CheckBox"><Setter Property="Margin" Value="0,4,12,2"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
+    </Window.Resources>
+    <DockPanel Margin="12">
+        <WrapPanel DockPanel.Dock="Bottom" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <TextBlock x:Name="summary" Foreground="Gray" Margin="0,0,16,0"/>
+            <Button Content="Cancel" Width="90" IsCancel="True" Click="cancel_click"/>
+            <Button Content="Export" Width="120" IsDefault="True" Click="ok_click"/>
+        </WrapPanel>
+        <TabControl Padding="8">
+            <TabItem Header="1  Families &amp; types">
+                <DockPanel>
+                    <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <TextBlock Text="Category"/><ComboBox x:Name="category" Width="250" SelectionChanged="category_changed"/>
+                        <TextBlock Text="Search" Margin="12,0,6,0"/><TextBox x:Name="search" Width="200" TextChanged="search_changed"/>
+                    </WrapPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                        <DockPanel Grid.Column="0">
+                            <TextBlock DockPanel.Dock="Top" Text="Families (tick to export, click to see its types)"/>
+                            <WrapPanel DockPanel.Dock="Bottom">
+                                <Button Content="Check all" Click="fam_all"/><Button Content="Uncheck all" Click="fam_none"/>
+                            </WrapPanel>
+                            <ListBox x:Name="families" SelectionChanged="family_selected"/>
+                        </DockPanel>
+                        <DockPanel Grid.Column="2">
+                            <TextBlock x:Name="types_title" DockPanel.Dock="Top" Text="Types"/>
+                            <WrapPanel DockPanel.Dock="Bottom">
+                                <Button Content="Check all" Click="type_all"/><Button Content="Uncheck all" Click="type_none"/>
+                            </WrapPanel>
+                            <ListBox x:Name="types_list"/>
+                        </DockPanel>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="2  Material">
+                <StackPanel>
+                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="For concrete columns and beams: tick one or more grades. Each ticked grade makes its own file with that material on every exported type (e.g. ..._C30-37.rfa and ..._C25-30.rfa). Tick nothing to keep each family's material as it is. Other families are exported unchanged."/>
+                    <WrapPanel x:Name="grades"/>
+                    <WrapPanel Margin="0,8,0,0">
+                        <Button Content="Check all" Click="grade_all"/><Button Content="Uncheck all" Click="grade_none"/>
+                    </WrapPanel>
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="3  Graphics">
+                <StackPanel>
+                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="Graphic style written into the exported concrete column / beam families (object styles and the material's cut pattern, surface pattern and 3D colour)."/>
+                    <WrapPanel><TextBlock Text="Style"/><ComboBox x:Name="graphics" Width="300"/></WrapPanel>
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="4  Naming &amp; folder">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top">
+                        <WrapPanel>
+                            <TextBlock Text="Naming"/><ComboBox x:Name="naming" Width="300" SelectionChanged="naming_changed"/>
+                        </WrapPanel>
+                        <WrapPanel x:Name="name_parts">
+                            <CheckBox x:Name="n_company" Content="Company" Click="refresh_names"/>
+                            <TextBox x:Name="company" Width="70" Margin="0,2,16,2" TextChanged="refresh_names"/>
+                            <CheckBox x:Name="n_code" Content="Category code (STR, TAG, TB...)" Click="refresh_names"/>
+                            <CheckBox x:Name="n_element" Content="Element (Beam, Column...)" Click="refresh_names"/>
+                            <CheckBox x:Name="n_variant" Content="Variant (RC-Rectangular...)" Click="refresh_names"/>
+                            <CheckBox x:Name="n_material" Content="Material (C30-37)" Click="refresh_names"/>
+                        </WrapPanel>
+                        <WrapPanel Margin="0,6,0,0">
+                            <TextBlock Text="Folders"/><ComboBox x:Name="folders" Width="300" SelectionChanged="refresh_names"/>
+                        </WrapPanel>
+                        <WrapPanel Margin="0,6,0,6">
+                            <TextBlock Text="Save in"/><TextBox x:Name="root" Width="520" TextChanged="refresh_names"/>
+                            <Button Content="Browse..." Click="browse"/>
+                        </WrapPanel>
+                        <TextBlock Text="Files that will be written:"/>
+                    </StackPanel>
+                    <ListBox x:Name="preview" FontFamily="Consolas"/>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

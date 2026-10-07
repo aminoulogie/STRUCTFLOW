@@ -315,3 +315,166 @@ def rename_to_library(doc, planned, log):
         n += 1
         log("renamed %s -> %s" % (old, new))
     return n
+
+
+# ------------------------------------------------- export wizard (naming)
+ELEMENT_BY_CAT = {
+    "Structural Columns": "Column", "Structural Framing": "Beam",
+    "Structural Foundations": "Foundation", "Structural Trusses": "Truss",
+    "Title Blocks": "TitleBlock", "Profiles": "Profile", "Detail Items": "Detail",
+    "Structural Rebar Couplers": "Coupler", "Generic Annotations": "Symbol",
+}
+MATERIAL_KEY = {"Structural Columns": "columns", "Structural Framing": "beams"}
+
+
+def _camel(text):
+    words = re.findall(r"[A-Za-z0-9]+", text)
+    return "".join(w[:1].upper() + w[1:] for w in words)
+
+
+def category_code(f):
+    cat = f.FamilyCategory.Name if f.FamilyCategory is not None else ""
+    low = cat.lower()
+    if low.endswith("tags"):
+        return "TAG"
+    if low == "title blocks":
+        return "TB"
+    if low == "profiles":
+        return "PRF"
+    if low == "detail items":
+        return "DET"
+    if "analytical" in low or "boundary" in low:
+        return "ANL"
+    if low.startswith("structural") or low in ("rebar shape",):
+        return "STR"
+    try:
+        from Autodesk.Revit.DB import CategoryType
+        if f.FamilyCategory.CategoryType == CategoryType.Annotation:
+            return "ANN"
+    except Exception:
+        pass
+    return "ARC"
+
+
+def name_parts(f, lib=None):
+    """(element, variant) for the EPL name: from the library standard when the
+    family is in it, otherwise derived from the category and family name."""
+    lib = lib or load_library()
+    rel = lib["map"].get(f.Name)
+    if rel is None:
+        by_new = dict((r.split("\\")[-1], r) for r in lib["map"].values())
+        rel = by_new.get(f.Name)
+    if rel is not None:
+        parts = rel.split("\\")[-1].split("_")
+        if len(parts) >= 3:
+            return parts[2], "_".join(parts[3:])
+    cat = f.FamilyCategory.Name if f.FamilyCategory is not None else ""
+    if cat.lower().endswith("tags"):
+        element = _camel(cat[:-4].replace("Structural", "Str"))
+    else:
+        element = ELEMENT_BY_CAT.get(cat, _camel(cat))
+    variant = "-".join(re.findall(r"[A-Za-z0-9]+", f.Name))
+    return element, variant
+
+
+def library_folder(f, lib=None):
+    lib = lib or load_library()
+    rel = lib["map"].get(f.Name)
+    if rel is None:
+        by_new = dict((r.split("\\")[-1], r) for r in lib["map"].values())
+        rel = by_new.get(f.Name)
+    if rel is not None:
+        return "\\".join(rel.split("\\")[:-1])
+    if re.match(r"^\d{2}$", f.Name):
+        return lib["rebar_shape_folder"]
+    return "UNSORTED"
+
+
+def build_name(f, opts, grade=None, lib=None):
+    """opts: company (text or ''), code, element, variant, material (bools)."""
+    if not opts.get("rename"):
+        base = _safe(f.Name)
+        return base + ("_" + grade.replace("/", "-") if grade and opts.get("material") else "")
+    element, variant = name_parts(f, lib)
+    parts = []
+    if opts.get("company"):
+        parts.append(opts["company"])
+    if opts.get("code"):
+        parts.append(category_code(f))
+    if opts.get("element"):
+        parts.append(element)
+    if opts.get("variant") and variant:
+        parts.append(variant)
+    if opts.get("material") and grade:
+        parts.append(grade.replace("/", "-"))
+    return _safe("_".join(parts) or f.Name)
+
+
+def _material_param(fm):
+    from Autodesk.Revit.DB import BuiltInParameter
+    for p in fm.Parameters:
+        d = p.Definition
+        try:
+            if d.BuiltInParameter == BuiltInParameter.STRUCTURAL_MATERIAL_PARAM:
+                return p
+        except Exception:
+            pass
+    for p in fm.Parameters:
+        if p.Definition.Name in ("Structural Material", "Material"):
+            return p
+    return None
+
+
+def export_jobs(doc, jobs, log):
+    """jobs: dicts {family, types (set of names or None), path, key, material (dict or None),
+    graphics (dict or None)}. Each family is opened, trimmed to the chosen types,
+    given the material / graphics, saved as path, and closed (the model is not changed)."""
+    import sf_graphics as sg
+    from Autodesk.Revit.DB import Transaction
+    done = 0
+    for job in jobs:
+        f, path = job["family"], job["path"]
+        folder = os.path.dirname(path)
+        if not os.path.isdir(folder):
+            os.makedirs(folder)
+        fdoc = None
+        try:
+            fdoc = doc.EditFamily(f)
+            fm = fdoc.FamilyManager
+            t = Transaction(fdoc, "StructFlow export")
+            t.Start()
+            if job["types"] is not None:
+                for ft in list(fm.Types):
+                    if ft.Name not in job["types"] and fm.Types.Size > 1:
+                        fm.CurrentType = ft
+                        fm.DeleteCurrentType()
+            key = job["key"]
+            if key and job["graphics"] is not None:
+                sg.apply_object_styles(fdoc, key, job["graphics"])
+            if key and job["material"] is not None:
+                g = job["graphics"] or sg.PRESETS["EPL (recommended UK)"][key]
+                mat = sg.apply_material(fdoc, key, g, job["material"])
+                p = _material_param(fm)
+                if p is None:
+                    log("note: %s has no material parameter, material not set" % f.Name)
+                else:
+                    for ft in list(fm.Types):
+                        fm.CurrentType = ft
+                        fm.Set(p, mat.Id)
+            t.Commit()
+            opts = SaveAsOptions()
+            opts.OverwriteExistingFile = True
+            opts.MaximumBackups = 1
+            fdoc.SaveAs(path, opts)
+            done += 1
+            log("saved   %s" % path)
+            stem = os.path.splitext(os.path.basename(path))[0]
+            for fn in os.listdir(folder):
+                if re.match(re.escape(stem) + r"\.\d{4}\.rfa$", fn):
+                    os.remove(os.path.join(folder, fn))
+        except Exception as ex:
+            log("FAILED  %s: %s" % (f.Name, br._err(ex)))
+        finally:
+            if fdoc is not None:
+                fdoc.Close(False)
+    return done

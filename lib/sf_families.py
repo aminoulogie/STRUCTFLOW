@@ -478,3 +478,47 @@ def export_jobs(doc, jobs, log):
             if fdoc is not None:
                 fdoc.Close(False)
     return done
+
+
+# ------------------------------------------------- system types (.rvt)
+def system_types(doc):
+    """{'Floors': {name: type}, 'Walls': ..., 'Roofs': ..., 'Ceilings': ...}"""
+    from Autodesk.Revit.DB import CeilingType, RoofType
+    out = {}
+    for label, cls in (("Floors", FloorType), ("Walls", WallType), ("Roofs", RoofType),
+                       ("Ceilings", CeilingType)):
+        out[label] = dict((br.ename(t), t) for t in FilteredElementCollector(doc).OfClass(cls))
+    return out
+
+
+def export_system_types(doc, types, path, log):
+    """Copy the chosen floor / wall / roof / ceiling types (with their
+    materials) into a new empty metric project and save it as .rvt. The client
+    loads them with Manage > Transfer Project Standards."""
+    from System.Collections.Generic import List
+    from Autodesk.Revit.DB import (CopyPasteOptions, ElementId, ElementTransformUtils,
+                                   Transaction, Transform, UnitSystem)
+    folder = os.path.dirname(path)
+    if folder and not os.path.isdir(folder):
+        os.makedirs(folder)
+    ndoc = doc.Application.NewProjectDocument(UnitSystem.Metric)
+    try:
+        t = Transaction(ndoc, "StructFlow system types")
+        t.Start()
+        ElementTransformUtils.CopyElements(doc, List[ElementId]([x.Id for x in types]), ndoc,
+                                           Transform.Identity, CopyPasteOptions())
+        t.Commit()
+        opts = SaveAsOptions()
+        opts.OverwriteExistingFile = True
+        ndoc.SaveAs(path, opts)
+        log("saved %d types to %s" % (len(types), path))
+        stem = os.path.splitext(os.path.basename(path))[0]
+        for fn in os.listdir(folder or "."):
+            if re.match(re.escape(stem) + r"\.\d{4}\.rvt$", fn):
+                os.remove(os.path.join(folder, fn))
+        return True
+    except Exception as ex:
+        log("FAILED: %s" % br._err(ex))
+        return False
+    finally:
+        ndoc.Close(False)

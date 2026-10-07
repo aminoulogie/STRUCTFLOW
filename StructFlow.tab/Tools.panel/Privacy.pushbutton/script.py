@@ -1,66 +1,90 @@
 # -*- coding: utf-8 -*-
-"""Privacy Mode toggle: hides the pyRevit and StructFlow ribbon tabs
-(e.g. before screen sharing); run it again (same button / shortcut) to
-show them. As a safety net they also come back by themselves after the
-time you pick, or when Revit restarts."""
+"""Privacy Mode toggle (same button / shortcut hides and shows).
+
+Revit will not run a shortcut whose button is invisible, so the
+StructFlow tab is never hidden: it is emptied instead (no title, panels
+hidden, this button with no text or icon). The pyRevit tab is hidden
+completely. Restarting Revit also brings everything back."""
 __title__ = "Privacy\nMode"
-__persistentengine__ = True  # keep the timer's callback alive after the script ends
 
 import clr
 clr.AddReference("AdWindows")
-clr.AddReference("WindowsBase")
 from Autodesk.Windows import ComponentManager
-from System import AppDomain, TimeSpan
-from System.Windows.Threading import DispatcherTimer
 
-from pyrevit import forms
-
-TABS = ("pyRevit", "StructFlow")
-CHOICES = {"Hide for 15 minutes": 15, "Hide for 30 minutes": 30,
-           "Hide for 1 hour": 60, "Hide for 2 hours": 120}
-KEY = "StructFlow.PrivacyTimer"
+MY_TAB, MY_PANEL = "StructFlow", "Tools"
+OTHER_TABS = ("pyRevit",)
+BUTTON_TEXT = "Privacy\nMode"
 
 
-def targets():
-    return [t for t in ComponentManager.Ribbon.Tabs if t.Title in TABS]
+def find_tab(title_or_id):
+    for t in ComponentManager.Ribbon.Tabs:
+        if t.Title == title_or_id or t.Id == title_or_id:
+            return t
+    return None
 
 
-def set_visible(visible):
+def my_tab():
+    # once emptied the title is blank, so fall back to the tab's id
+    t = find_tab(MY_TAB)
+    if t is None:
+        for cand in ComponentManager.Ribbon.Tabs:
+            if MY_TAB in (cand.Id or ""):
+                return cand
+    return t
+
+
+def privacy_item(panel):
+    for item in panel.Source.Items:
+        if "Privacy" in (item.Id or "") or "Privacy" in (item.Text or ""):
+            return item
+    return None
+
+
+def is_private(tab):
+    return tab.Title != MY_TAB
+
+
+def hide(tab):
     ribbon = ComponentManager.Ribbon
-    tabs = targets()
-    if not visible and ribbon.ActiveTab in tabs:
-        for t in ribbon.Tabs:
-            if t.IsVisible and t not in tabs:
-                t.IsActive = True
-                break
-    for t in tabs:
-        t.IsVisible = visible
+    for t in ribbon.Tabs:
+        if t.Title in OTHER_TABS:
+            if t.IsActive:
+                ribbon.Tabs[0].IsActive = True
+            t.IsVisible = False
+    for p in tab.Panels:
+        if p.Source.Title == MY_PANEL:
+            p.Source.Title = ""
+            item = privacy_item(p)
+            if item is not None:
+                item.Text = ""
+                item.ShowText = False
+                item.ShowImage = False
+        else:
+            p.IsVisible = False
+    tab.Title = ""
+    if tab.IsActive:
+        ribbon.Tabs[0].IsActive = True
 
 
-def stop_timer():
-    old = AppDomain.CurrentDomain.GetData(KEY)
-    if old is not None:
-        old.Stop()
+def show(tab):
+    for t in ComponentManager.Ribbon.Tabs:
+        if t.Title in OTHER_TABS:
+            t.IsVisible = True
+    for p in tab.Panels:
+        p.IsVisible = True
+        if p.Source.Title == "":
+            p.Source.Title = MY_PANEL
+            item = privacy_item(p)
+            if item is not None:
+                item.Text = BUTTON_TEXT
+                item.ShowText = True
+                item.ShowImage = True
+    tab.Title = MY_TAB
 
 
-if any(not t.IsVisible for t in targets()):
-    # tabs are hidden: this press brings them back
-    stop_timer()
-    set_visible(True)
-else:
-    choice = forms.CommandSwitchWindow.show(
-        sorted(CHOICES, key=lambda k: CHOICES[k]),
-        message="Press the same shortcut again to show the tabs (they also come back by themselves).")
-    if choice:
-        stop_timer()
-        timer = DispatcherTimer()
-        timer.Interval = TimeSpan.FromMinutes(CHOICES[choice])
-
-        def tick(sender, args):
-            sender.Stop()
-            set_visible(True)
-
-        timer.Tick += tick
-        AppDomain.CurrentDomain.SetData(KEY, timer)  # keep it referenced
-        set_visible(False)
-        timer.Start()
+tab = my_tab()
+if tab is not None:
+    if is_private(tab):
+        show(tab)
+    else:
+        hide(tab)

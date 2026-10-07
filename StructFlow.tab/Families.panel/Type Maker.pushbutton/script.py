@@ -162,9 +162,8 @@ class TypeMakerWindow(forms.WPFWindow):
             self.base.SelectedIndex = 0
         self._set_graphics(self.state[key]["g"])
         self._set_material(self.state[key]["m"])
-        self.preset.SelectedIndex = -1
-        self.preset_note.Text = ""
         self.edit_mode.IsChecked = False
+        self._load_current()
 
     def base_changed(self, sender, args):
         if self.base.SelectedItem is None:
@@ -179,12 +178,21 @@ class TypeMakerWindow(forms.WPFWindow):
                 combo.SelectedItem = sf.guess(names, wanted)
         if self.edit_mode.IsChecked:
             self.edit_changed(None, None)
+        if self.key is not None:
+            self._load_current()
 
     def edit_changed(self, sender, args):
         if not self.edit_mode.IsChecked or self.base.SelectedItem is None:
             return
         base = self.choices[self.base.SelectedItem]
         self.sizes.Text = sf.describe_existing(doc, self.key, base, self.p_w.SelectedItem, self.p_h.SelectedItem)
+
+    def _load_current(self):
+        """Show how the picked family / type looks in the model right now."""
+        if self.preset.SelectedItem == CURRENT:
+            self.preset_changed(None, None)
+        else:
+            self.preset.SelectedItem = CURRENT
 
     def preset_changed(self, sender, args):
         name = self.preset.SelectedItem
@@ -197,7 +205,10 @@ class TypeMakerWindow(forms.WPFWindow):
                 base = self.choices[self.base.SelectedItem]
                 t = base if self.kind == "host" else sf.first_symbol(doc, base)
                 mat = sg.material_of(doc, t) if t is not None else None
-            self._set_graphics(sg.read_current(doc, self.key, mat))
+            g, notes = sg.read_with_view(doc, self.key, mat, revit.active_view)
+            self._set_graphics(g)
+            self.preset_note.Text = ("Loaded from what you see now: " + ", ".join(notes) +
+                                     ". Pick EPL or another preset to change it.")
         else:
             self._set_graphics(sg.PRESETS[name][self.key])
 
@@ -252,6 +263,7 @@ class TypeMakerWindow(forms.WPFWindow):
             "pattern": self.pattern.Text, "entries": entries, "update": bool(self.update.IsChecked),
             "p_w": self.p_w.SelectedItem, "p_h": self.p_h.SelectedItem,
             "g": g, "m": m, "apply_styles": bool(self.apply_styles.IsChecked),
+            "apply_view": bool(self.apply_view.IsChecked),
             "apply_material": bool(self.apply_material.IsChecked),
         }
         self.Close()
@@ -277,6 +289,10 @@ if r:
         if r["apply_styles"]:
             sg.apply_object_styles(doc, r["key"], r["g"])
             log.append("object styles updated for all %s" % sg.CATS[r["key"]][0].lower())
+        if r["apply_view"]:
+            name = sg.apply_view_overrides(doc, r["key"], r["g"], revit.active_view)
+            if name:
+                log.append("view overrides set in '%s'" % name)
         if r["apply_material"]:
             mat = sg.apply_material(doc, r["key"], r["g"], r["m"])
             n = sum(1 for e in touched if sg.assign_material(doc, e, mat))

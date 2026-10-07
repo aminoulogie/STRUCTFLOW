@@ -205,6 +205,61 @@ def read_current(doc, key, material=None):
     return g
 
 
+def view_source(doc, view):
+    """The view whose Visibility/Graphics actually apply: its template if it has one."""
+    if view is None:
+        return None
+    tid = view.ViewTemplateId
+    if tid is not None and tid != ElementId.InvalidElementId:
+        return doc.GetElement(tid)
+    return view
+
+
+def read_with_view(doc, key, material, view):
+    """Object styles + material, then the view's (or its template's)
+    Visibility/Graphics category overrides on top - that's what you see.
+    Returns (graphics, [where each part came from])."""
+    g = read_current(doc, key, material)
+    notes = ["Object Styles"]
+    if material is not None:
+        notes.append("material '%s'" % material.Name)
+    src = view_source(doc, view)
+    if src is None:
+        return g, notes
+    lps, fps = line_patterns(doc), fill_patterns(doc)
+    used = False
+    for bic, hidden in ((CATS[key][1], False), (CATS[key][2], True)):
+        cat = doc.Settings.Categories.get_Item(bic)
+        if cat is None or not src.IsCategoryOverridable(cat.Id):
+            continue
+        o = src.GetCategoryOverrides(cat.Id)
+        if hidden:
+            if o.ProjectionLineWeight > 0:
+                g["hidden_w"], used = o.ProjectionLineWeight, True
+            if o.ProjectionLinePatternId != ElementId.InvalidElementId:
+                g["hidden_pattern"], used = _name_of(lps, o.ProjectionLinePatternId), True
+            continue
+        if o.CutLineWeight > 0:
+            g["cut_w"], used = o.CutLineWeight, True
+        if o.ProjectionLineWeight > 0:
+            g["proj_w"], used = o.ProjectionLineWeight, True
+        for col in (o.CutLineColor, o.ProjectionLineColor):
+            if col.IsValid:
+                g["colour"], used = rgb_text(col), True
+                break
+        if o.ProjectionLinePatternId != ElementId.InvalidElementId:
+            g["proj_pattern"], used = _name_of(lps, o.ProjectionLinePatternId), True
+        if o.CutForegroundPatternId != ElementId.InvalidElementId:
+            g["cut_fill"], used = _name_of(fps, o.CutForegroundPatternId), True
+        if o.CutForegroundPatternColor.IsValid:
+            g["cut_fill_colour"], used = rgb_text(o.CutForegroundPatternColor), True
+        if o.SurfaceForegroundPatternColor.IsValid:
+            g["surface_colour"], used = rgb_text(o.SurfaceForegroundPatternColor), True
+    if used:
+        notes.append("%s '%s' overrides" % ("view template" if src.IsTemplate else "view", src.Name))
+    return g, notes
+
+
 def apply_object_styles(doc, key, g):
     """Category-wide: affects every element of this category in the model."""
     cat = doc.Settings.Categories.get_Item(CATS[key][1])
@@ -294,3 +349,32 @@ def material_of(doc, element_type):
         if idx >= 0:
             return doc.GetElement(cs.GetMaterialId(idx))
     return None
+
+
+def apply_view_overrides(doc, key, g, view):
+    """Write the same settings into the view's template (or the view) V/G
+    overrides, so a template that overrides the category shows them too."""
+    from Autodesk.Revit.DB import OverrideGraphicSettings
+    src = view_source(doc, view)
+    if src is None:
+        return None
+    lps, fps = line_patterns(doc), fill_patterns(doc)
+    cat = doc.Settings.Categories.get_Item(CATS[key][1])
+    o = OverrideGraphicSettings()
+    col = _rcolor(g["colour"])
+    o.SetCutLineWeight(int(g["cut_w"])).SetProjectionLineWeight(int(g["proj_w"]))
+    o.SetCutLineColor(col).SetProjectionLineColor(col)
+    if g["proj_pattern"] != "Solid":
+        o.SetProjectionLinePatternId(_pattern_id(lps, g["proj_pattern"]))
+    fid = _pattern_id(fps, g["cut_fill"])
+    if fid != ElementId.InvalidElementId:
+        o.SetCutForegroundPatternId(fid).SetCutForegroundPatternColor(_rcolor(g["cut_fill_colour"]))
+    src.SetCategoryOverrides(cat.Id, o)
+    hidden = doc.Settings.Categories.get_Item(CATS[key][2])
+    if hidden is not None and src.IsCategoryOverridable(hidden.Id):
+        h = OverrideGraphicSettings().SetProjectionLineWeight(int(g["hidden_w"])).SetProjectionLineColor(col)
+        hid = _pattern_id(lps, g["hidden_pattern"])
+        if hid != ElementId.InvalidElementId:
+            h.SetProjectionLinePatternId(hid)
+        src.SetCategoryOverrides(hidden.Id, h)
+    return src.Name

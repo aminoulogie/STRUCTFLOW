@@ -81,6 +81,7 @@
                                 </StackPanel>
                             </GroupBox>
                             <CheckBox x:Name="apply_styles" Content="Apply the line settings to Object Styles (all elements of this category)" IsChecked="True"/>
+                            <CheckBox x:Name="apply_view" Content="Also write them into the active view's template overrides (Visibility/Graphics)"/>
                             <TextBlock Foreground="Gray" Text="Colours: a name (Black, Pink, Concrete...) or R,G,B such as 255,0,128."/>
                         </StackPanel>
                     </TabItem>

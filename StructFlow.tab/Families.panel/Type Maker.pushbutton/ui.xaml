@@ -37,6 +37,10 @@
                             <StackPanel x:Name="types_panel" Visibility="Collapsed" Margin="0,6,0,0">
                                 <TextBlock Text="Types in this family - click one to see its look and material (Ctrl / Shift for several):"/>
                                 <ListBox x:Name="types_list" Height="120" SelectionMode="Extended" SelectionChanged="type_selected"/>
+                                <WrapPanel Margin="0,4,0,0">
+                                    <Button Content="Delete selected types..." Padding="10,2" Click="delete_types"/>
+                                    <TextBlock Foreground="Gray" Margin="10,0,0,0" Text="asks first; types placed in the model are reported"/>
+                                </WrapPanel>
                             </StackPanel>
                             <TextBlock x:Name="sizes_hint" Margin="0,8,0,2" TextWrapping="Wrap"/>
                             <TextBox x:Name="sizes" Height="150" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontFamily="Consolas"/>

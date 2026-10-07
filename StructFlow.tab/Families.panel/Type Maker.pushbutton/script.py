@@ -7,7 +7,8 @@ __title__ = "Type\nMaker"
 import os
 
 from pyrevit import forms, revit
-from Autodesk.Revit.DB import FillPatternTarget, Transaction
+from Autodesk.Revit.DB import ElementId, FillPatternTarget, FilteredElementCollector, Transaction
+from System.Collections.Generic import List
 from System import TimeSpan
 from System.Windows import Visibility
 from System.Windows.Threading import DispatcherTimer
@@ -198,6 +199,49 @@ class TypeMakerWindow(forms.WPFWindow):
         for name in sorted(types):
             self.type_items[name] = types[name]
             self.types_list.Items.Add(name)
+
+    def delete_types(self, sender, args):
+        """Delete the selected types from the model (and from the family's type list)."""
+        types = self.selected_types()
+        if not types:
+            forms.alert("Select the types to delete in the list first.")
+            return
+        bic = sf.CATEGORIES[self.category.SelectedIndex][2]
+        used = {}
+        for el in FilteredElementCollector(doc).OfCategory(bic).WhereElementIsNotElementType():
+            tid = el.GetTypeId()
+            used[tid] = used.get(tid, 0) + 1
+        placed = [(t, used.get(t.Id, 0)) for t in types if used.get(t.Id, 0)]
+        total = len(self.type_items)
+        if total - len(types) < 1:
+            forms.alert("A family must keep at least one type: leave one unselected.")
+            return
+        nl = chr(10)
+        names = nl.join("  %s%s" % (sf.br.ename(t), "   (%d placed)" % used[t.Id] if t.Id in used else "")
+                        for t in types)
+        if placed:
+            choice = forms.CommandSwitchWindow.show(
+                ["Delete only the unused ones", "Delete all, including their %d placed element(s)"
+                 % sum(n for _, n in placed)],
+                message="Delete these types?" + nl + names)
+            if not choice:
+                return
+            if choice.startswith("Delete only"):
+                types = [t for t in types if t.Id not in used]
+        elif not forms.alert("Delete these types?" + nl + names, yes=True, no=True):
+            return
+        if not types:
+            return
+        t = Transaction(doc, "StructFlow delete types")
+        t.Start()
+        try:
+            doc.Delete(List[ElementId]([x.Id for x in types]))
+            t.Commit()
+        except Exception as ex:
+            t.RollBack()
+            forms.alert("Nothing deleted: %s" % ex)
+            return
+        self.edit_changed(None, None)
 
     def selected_types(self):
         return [self.type_items[n] for n in self.types_list.SelectedItems if n in self.type_items]

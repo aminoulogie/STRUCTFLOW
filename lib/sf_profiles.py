@@ -24,6 +24,11 @@ def _get(sec, *names):
     return 0.0
 
 
+def _param_mm(symbol, name):
+    p = symbol.LookupParameter(name) if (symbol is not None and name) else None
+    return p.AsDouble() / MM if p is not None and p.HasValue else 0.0
+
+
 def profile_of_symbol(symbol, p_w=None, p_h=None):
     """{'shape', 'w', 'h', 't', 'tw', 'tf', 'name'} in mm."""
     sec = None
@@ -34,6 +39,22 @@ def profile_of_symbol(symbol, p_w=None, p_h=None):
         sec = None
     if sec is not None:
         shape = str(sec.StructuralSectionShape)
+        if shape.startswith("Concrete"):
+            # concrete section data is not always kept in step with the
+            # family's b / h: the parameters are the truth
+            pw, ph = _param_mm(symbol, p_w), _param_mm(symbol, p_h)
+            if shape == "ConcreteRound":
+                d = pw or ph or _get(sec, "Diameter")
+                return {"shape": "circle", "w": d, "h": d, "name": shape}
+            w, h = pw or _get(sec, "Width"), ph or _get(sec, "Height")
+            tw, tf = _get(sec, "WebThickness"), _get(sec, "FlangeThickness")
+            if shape == "ConcreteT" and tw and tf:
+                return {"shape": "T", "w": w, "h": h, "tw": tw, "tf": tf, "name": shape}
+            if shape == "ConcreteL" and tw and tf:
+                return {"shape": "L", "w": w, "h": h, "tw": tw, "tf": tf, "name": shape}
+            if shape == "ConcreteI" and tw and tf:
+                return {"shape": "I", "w": w, "h": h, "tw": tw, "tf": tf, "name": shape}
+            return {"shape": "rect", "w": w or 300.0, "h": h or 450.0, "name": shape}
         d = _get(sec, "Diameter")
         w, h = _get(sec, "Width"), _get(sec, "Height")
         t = _get(sec, "WallNominalThickness", "WallDesignThickness")

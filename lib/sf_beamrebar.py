@@ -95,6 +95,13 @@ def is_category(el, bic):
         return cat.Id == ElementId(bic)
 
 
+def is_category_id(cat, bic):
+    try:
+        return cat.BuiltInCategory == bic
+    except Exception:
+        return cat.Id == ElementId(bic)
+
+
 def merged(intervals):
     out = []
     for a, b in sorted(intervals):

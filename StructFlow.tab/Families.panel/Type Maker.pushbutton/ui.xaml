@@ -96,7 +96,11 @@
 
                     <TabItem Header="Material">
                         <StackPanel>
-                            <WrapPanel><TextBlock Text="Material name" Width="160"/><TextBox x:Name="mat_name" Width="300"/></WrapPanel>
+                            <TextBlock Text="Material names - one per line or separated by commas (a grade in the name, e.g. C30/37, fills fck and Ecm):" TextWrapping="Wrap"/>
+                            <TextBox x:Name="mat_name" Height="70" AcceptsReturn="True" TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto" FontFamily="Consolas" Margin="0,2,0,6"/>
+                            <CheckBox x:Name="per_material" Content="Make every size in every material (type name gets the grade, e.g. 300x600 C30/37)"/>
+                            <TextBlock Foreground="Gray" Text="Values below are used for names without a grade:" Margin="0,6,0,2"/>
                             <WrapPanel><TextBlock Text="Concrete grade (BS 8500)" Width="160"/><ComboBox x:Name="grade" Width="120" SelectionChanged="grade_changed"/></WrapPanel>
                             <WrapPanel>
                                 <TextBlock Text="fck (MPa)" Width="160"/><TextBox x:Name="fck" Width="70"/>

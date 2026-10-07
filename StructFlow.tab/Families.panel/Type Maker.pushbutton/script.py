@@ -5,6 +5,7 @@ their concrete material, with a live preview."""
 __title__ = "Type\nMaker"
 
 import os
+import re
 
 from pyrevit import forms, revit
 from Autodesk.Revit.DB import ElementId, FillPatternTarget, FilteredElementCollector, Transaction
@@ -110,7 +111,7 @@ class TypeMakerWindow(forms.WPFWindow):
         return g
 
     def _set_material(self, m):
-        self.mat_name.Text = m["name"]
+        self.mat_name.Text = chr(10).join(m.get("names") or [m["name"]])
         self.grade.SelectedItem = m["grade"]
         for key in MFIELDS:
             getattr(self, key).Text = "%g" % float(m[key])
@@ -118,13 +119,31 @@ class TypeMakerWindow(forms.WPFWindow):
         self.keynote.Text = m.get("keynote", "")
 
     def _get_material(self):
-        m = {"name": self.mat_name.Text.strip(), "grade": str(self.grade.SelectedItem or ""),
+        names = [n.strip() for n in re.split(r"[,;\n]+", self.mat_name.Text) if n.strip()]
+        if not names:
+            raise ValueError("give the material a name")
+        m = {"name": names[0], "names": names, "grade": str(self.grade.SelectedItem or ""),
              "description": self.description.Text.strip(), "keynote": self.keynote.Text.strip()}
         for key in MFIELDS:
             m[key] = float(getattr(self, key).Text)
-        if not m["name"]:
-            raise ValueError("give the material a name")
         return m
+
+    def materials(self, m):
+        """One material dict per name; a grade written in the name sets fck / Ecm."""
+        out = []
+        for name in m["names"]:
+            mm = dict(m)
+            mm["name"] = name
+            found = re.search(r"C\d{2}/\d{2}", name)
+            grade = found.group(0) if found else m["grade"]
+            for g, fck, ecm in sg.GRADES:
+                if g == grade and found:
+                    mm["fck"], mm["ecm"] = fck, ecm
+            if m["grade"] and grade != m["grade"]:
+                mm["description"] = m["description"].replace(m["grade"], grade)
+            mm["grade"], mm["short"] = grade, (grade if found else name)
+            out.append(mm)
+        return out
 
     def _store(self):
         if self.key is None:
@@ -290,8 +309,11 @@ class TypeMakerWindow(forms.WPFWindow):
         for g, fck, ecm in sg.GRADES:
             if g == grade:
                 self.fck.Text, self.ecm.Text = "%g" % fck, "%g" % ecm
-                # keep the default naming in step with the grade
+                # keep a single default name in step with the grade
+                # (a list of several materials is left as typed)
                 name = self.mat_name.Text
+                if len([n for n in re.split(r"[,;\n]+", name) if n.strip()]) > 1:
+                    break
                 for other, _, _ in sg.GRADES:
                     if other in name:
                         self.mat_name.Text = name.replace(other, g)
@@ -354,7 +376,8 @@ class TypeMakerWindow(forms.WPFWindow):
             "key": self.key, "kind": self.kind, "base": self.choices[self.base.SelectedItem],
             "pattern": self.pattern.Text, "entries": entries, "update": bool(self.update.IsChecked),
             "p_w": self.p_w.SelectedItem, "p_h": self.p_h.SelectedItem,
-            "g": g, "m": m, "apply_styles": bool(self.apply_styles.IsChecked),
+            "g": g, "m": m, "mats": self.materials(m), "per_material": bool(self.per_material.IsChecked),
+            "apply_styles": bool(self.apply_styles.IsChecked),
             "apply_view": bool(self.apply_view.IsChecked),
             "targets": self.selected_types() if self.edit_mode.IsChecked else [],
             "apply_material": bool(self.apply_material.IsChecked),
@@ -373,12 +396,13 @@ if r:
     t = Transaction(doc, "StructFlow Type Maker")
     t.Start()
     try:
-        if r["kind"] == "host":
-            touched = sf.make_host_types(doc, r["key"], r["base"], r["pattern"], r["entries"],
-                                         r["update"], log.append)
-        else:
-            touched = sf.make_family_types(doc, r["base"], r["pattern"], r["entries"],
-                                           r["p_w"], r["p_h"], r["update"], log.append)
+        def make(entries):
+            if r["kind"] == "host":
+                return sf.make_host_types(doc, r["key"], r["base"], r["pattern"], entries,
+                                          r["update"], log.append)
+            return sf.make_family_types(doc, r["base"], r["pattern"], entries,
+                                        r["p_w"], r["p_h"], r["update"], log.append)
+
         if r["apply_styles"]:
             sg.apply_object_styles(doc, r["key"], r["g"])
             log.append("object styles updated for all %s" % sg.CATS[r["key"]][0].lower())
@@ -386,11 +410,28 @@ if r:
             name = sg.apply_view_overrides(doc, r["key"], r["g"], revit.active_view)
             if name:
                 log.append("view overrides set in '%s'" % name)
-        if r["apply_material"]:
-            mat = sg.apply_material(doc, r["key"], r["g"], r["m"])
-            targets = r["targets"] or touched
-            n = sum(1 for e in targets if sg.assign_material(doc, e, mat))
-            log.append("material '%s' set on %d type(s)" % (mat.Name, n))
+
+        mats = r["mats"] if r["apply_material"] else []
+        if r["per_material"] and len(mats) > 1:
+            # every size in every material: '300x600 C30/37', 'GB 300x600 C25/30'...
+            for mm in mats:
+                entries = [((name or sf.type_name(r["pattern"].replace("{m}", ""), size)).strip()
+                            + " " + mm["short"], size) for name, size in r["entries"]]
+                made = make(entries)
+                mat = sg.apply_material(doc, r["key"], r["g"], mm)
+                n = sum(1 for e in made if sg.assign_material(doc, e, mat))
+                log.append("material '%s' set on %d type(s)" % (mat.Name, n))
+        else:
+            touched = make(r["entries"])
+            first = None
+            for mm in mats:
+                mat = sg.apply_material(doc, r["key"], r["g"], mm)
+                first = first or mat
+                log.append("material '%s' created / updated" % mat.Name)
+            if first is not None:
+                targets = r["targets"] or touched
+                n = sum(1 for e in targets if sg.assign_material(doc, e, first))
+                log.append("material '%s' set on %d type(s)" % (first.Name, n))
         t.Commit()
         sg.save(r["key"], r["g"], r["m"])
     except Exception as ex:

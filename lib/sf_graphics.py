@@ -378,3 +378,32 @@ def apply_view_overrides(doc, key, g, view):
             h.SetProjectionLinePatternId(hid)
         src.SetCategoryOverrides(hidden.Id, h)
     return src.Name
+
+
+def read_material(doc, mat, key):
+    """Material tab values from an existing material (falls back to defaults)."""
+    m = default_material(key)
+    if mat is None:
+        return m
+    m["name"] = mat.Name
+    p = mat.get_Parameter(BuiltInParameter.ALL_MODEL_DESCRIPTION)
+    m["description"] = (p.AsString() if p else "") or ""
+    p = mat.get_Parameter(BuiltInParameter.KEYNOTE_PARAM)
+    m["keynote"] = (p.AsString() if p else "") or ""
+    pse = doc.GetElement(mat.StructuralAssetId) if mat.StructuralAssetId != ElementId.InvalidElementId else None
+    asset = pse.GetStructuralAsset() if pse is not None else None
+    if asset is not None:
+        conv = UnitUtils.ConvertFromInternalUnits
+        m["density"] = round(conv(asset.Density, UnitTypeId.KilogramsPerCubicMeter), 1)
+        if asset.ConcreteCompression:
+            m["fck"] = round(conv(asset.ConcreteCompression, UnitTypeId.Megapascals), 1)
+        if asset.YoungModulus is not None:
+            m["ecm"] = round(conv(asset.YoungModulus.X, UnitTypeId.Megapascals) / 1000.0, 1)
+        if asset.PoissonRatio is not None:
+            m["poisson"] = round(asset.PoissonRatio.X, 3)
+        if asset.ThermalExpansionCoefficient is not None:
+            m["thermal"] = round(conv(asset.ThermalExpansionCoefficient.X,
+                                      UnitTypeId.InverseDegreesCelsius) * 1e6, 2)
+        # nearest standard grade for the dropdown
+        m["grade"] = min(GRADES, key=lambda gr: abs(gr[1] - m["fck"]))[0]
+    return m

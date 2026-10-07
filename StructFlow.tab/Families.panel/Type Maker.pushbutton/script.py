@@ -15,6 +15,7 @@ from System.Windows.Threading import DispatcherTimer
 import sf_families as sf
 import sf_graphics as sg
 import sf_preview as pv
+import sf_profiles as sp
 
 doc = revit.doc
 CURRENT = "Current model"
@@ -43,6 +44,8 @@ class TypeMakerWindow(forms.WPFWindow):
             entry = saved.get(key) or {}
             self.state[key] = {"g": entry.get("graphics") or dict(sg.PRESETS["EPL (recommended UK)"][key]),
                                "m": entry.get("material") or sg.default_material(key)}
+        self.dashes = sp.line_dashes(doc)
+        self.type_items = {}
         self._fill_static_lists()
         for _, label, _, _ in sf.CATEGORIES:
             self.category.Items.Add(label)
@@ -182,10 +185,36 @@ class TypeMakerWindow(forms.WPFWindow):
             self._load_current()
 
     def edit_changed(self, sender, args):
-        if not self.edit_mode.IsChecked or self.base.SelectedItem is None:
+        on = bool(self.edit_mode.IsChecked) and self.base.SelectedItem is not None
+        self.types_panel.Visibility = Visibility.Visible if on else Visibility.Collapsed
+        self.types_list.Items.Clear()
+        self.type_items = {}
+        if not on:
             return
         base = self.choices[self.base.SelectedItem]
         self.sizes.Text = sf.describe_existing(doc, self.key, base, self.p_w.SelectedItem, self.p_h.SelectedItem)
+        types = (sf.host_types(doc, self.key) if self.kind == "host"
+                 else dict((sf.br.ename(s), s) for s in sf.symbols_of(doc, base)))
+        for name in sorted(types):
+            self.type_items[name] = types[name]
+            self.types_list.Items.Add(name)
+
+    def selected_types(self):
+        return [self.type_items[n] for n in self.types_list.SelectedItems if n in self.type_items]
+
+    def type_selected(self, sender, args):
+        """Show the clicked type alone: its shape, its look and its material."""
+        types = self.selected_types()
+        if not types:
+            return
+        t = types[0]
+        mat = sg.material_of(doc, t)
+        g, notes = sg.read_with_view(doc, self.key, mat, revit.active_view)
+        self._set_graphics(g)
+        self._set_material(sg.read_material(doc, mat, self.key))
+        self.preset.SelectedIndex = -1
+        self.preset_note.Text = "Showing '%s' (%s)" % (sf.br.ename(t), ", ".join(notes))
+        self._last = None
 
     def _load_current(self):
         """Show how the picked family / type looks in the model right now."""
@@ -226,22 +255,41 @@ class TypeMakerWindow(forms.WPFWindow):
                         break
 
     # ----------------------------------------------------------- preview
-    def _preview_size(self):
+    def _preview_profile(self):
+        """Real section of the clicked type, else the family's shape with the
+        first size typed, else the family's first type."""
+        typed = None
         try:
-            entries = sf.parse_sizes(self.sizes.Text, self.kind == "family")
-            return entries[0][1]
+            typed = sf.parse_sizes(self.sizes.Text, self.kind == "family")[0][1]
         except Exception:
-            return (300.0, 450.0) if self.kind == "family" else (200.0,)
+            pass
+        sel = self.selected_types() if self.edit_mode.IsChecked else []
+        if self.kind == "host":
+            if sel:
+                return {"shape": "layer", "t": sf.thickness_of(sel[0])}
+            return {"shape": "layer", "t": typed[0] if typed else 200.0}
+        if self.base.SelectedItem is None:
+            return sp.rect_profile(*(typed or (300.0, 450.0)))
+        sym = sel[0] if sel else sf.first_symbol(doc, self.choices[self.base.SelectedItem])
+        prof = sp.profile_of_symbol(sym, self.p_w.SelectedItem, self.p_h.SelectedItem)
+        if typed and not sel and prof["shape"] in ("rect", "circle"):
+            prof = dict(prof)
+            prof["w"], prof["h"] = (typed[0], typed[0]) if prof["shape"] == "circle" else typed
+        return prof
 
     def _tick(self, sender, args):
         try:
             g = self._get_graphics()
         except Exception:
             return  # half-typed colour: keep the last drawing
-        snap = (self.key, repr(self._preview_size()), repr(sorted(g.items())))
+        try:
+            prof = self._preview_profile()
+        except Exception:
+            return
+        snap = (self.key, repr(sorted(prof.items())), repr(sorted(g.items())))
         if snap != self._last:
             self._last = snap
-            pv.draw(self.preview, self.key, self._preview_size(), g)
+            pv.draw(self.preview, self.key, prof, g, self.dashes)
 
     # --------------------------------------------------------------- run
     def ok_click(self, sender, args):
@@ -264,6 +312,7 @@ class TypeMakerWindow(forms.WPFWindow):
             "p_w": self.p_w.SelectedItem, "p_h": self.p_h.SelectedItem,
             "g": g, "m": m, "apply_styles": bool(self.apply_styles.IsChecked),
             "apply_view": bool(self.apply_view.IsChecked),
+            "targets": self.selected_types() if self.edit_mode.IsChecked else [],
             "apply_material": bool(self.apply_material.IsChecked),
         }
         self.Close()
@@ -295,7 +344,8 @@ if r:
                 log.append("view overrides set in '%s'" % name)
         if r["apply_material"]:
             mat = sg.apply_material(doc, r["key"], r["g"], r["m"])
-            n = sum(1 for e in touched if sg.assign_material(doc, e, mat))
+            targets = r["targets"] or touched
+            n = sum(1 for e in targets if sg.assign_material(doc, e, mat))
             log.append("material '%s' set on %d type(s)" % (mat.Name, n))
         t.Commit()
         sg.save(r["key"], r["g"], r["m"])

@@ -34,8 +34,12 @@
                                 <TextBlock Text="New type name" Width="140"/><TextBox x:Name="pattern" Width="180"/>
                                 <TextBlock x:Name="pattern_hint" Foreground="Gray"/>
                             </WrapPanel>
+                            <StackPanel x:Name="types_panel" Visibility="Collapsed" Margin="0,6,0,0">
+                                <TextBlock Text="Types in this family - click one to see its look and material (Ctrl / Shift for several):"/>
+                                <ListBox x:Name="types_list" Height="120" SelectionMode="Extended" SelectionChanged="type_selected"/>
+                            </StackPanel>
                             <TextBlock x:Name="sizes_hint" Margin="0,8,0,2" TextWrapping="Wrap"/>
-                            <TextBox x:Name="sizes" Height="250" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontFamily="Consolas"/>
+                            <TextBox x:Name="sizes" Height="150" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontFamily="Consolas"/>
                             <CheckBox x:Name="update" Content="Update types that already exist with the same name" IsChecked="True"/>
                         </StackPanel>
                     </TabItem>

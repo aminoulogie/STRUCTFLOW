@@ -37,6 +37,7 @@ FIELDS = {
     "arrow": (("X start", "Y start", "X tip", "Y tip"), True, False),
     "dot": (("X centre", "Y centre", "Radius", ""), False, False),
     "polygon": (("", "", "", ""), True, False),
+    "arc": (("X centre", "Y centre", "Radius", ""), False, False),
 }
 
 
@@ -55,11 +56,10 @@ class Designer(forms.WPFWindow):
         self.drag = None
         self.design = None
         self.base_labels = []
-        self.families = sy.annotation_families(doc)
+        self.fam_map = {}
+        self.fam_names = []
         for k in sy.KINDS:
             self.kinds.Items.Add(k[1])
-        for name in sorted(self.families):
-            self.base.Items.Add(name)
         for i in range(1, 17):
             self.f_pen.Items.Add(str(i))
         for d in ("up", "down", "left", "right"):
@@ -76,30 +76,43 @@ class Designer(forms.WPFWindow):
         return sy.KINDS[max(self.kinds.SelectedIndex, 0)][0]
 
     def kind_changed(self, sender, args):
-        self.set_design(sy.preset(self.kind_key(), cfg))
-        # suggest a base family of the right category
-        hints = {"grid_head": "Grid Heads", "level_head": "Level Heads", "section_head": "Section Marks",
-                 "section_tail": "Section Marks", "callout_head": "Callout Heads", "elevation_body": "Elevation Marks",
-                 "elevation_pointer": "Elevation Marks", "view_title": "View Titles", "rebar_tag": "Structural Rebar Tags",
-                 "column_tag": "Structural Column Tags", "beam_tag": "Structural Framing Tags",
-                 "foundation_tag": "Structural Foundation Tags", "revision_tag": "Revision Cloud Tags",
-                 "spot_elevation": "Spot Elevation Symbols", "span_direction": "Span Direction Symbol"}
-        hint = hints.get(self.kind_key())
-        if hint:
-            match = [n for n in sorted(self.families) if n.startswith(hint)]
-            epl = [n for n in match if ": EPL" in n]
-            if match:
-                self.base.SelectedItem = (epl or match)[0]
+        """List every loaded family of this kind; the first EPL one opens."""
+        self.fam_map = sy.families_of_kind(doc, self.kind_key())
+        self.fam_names = sorted(self.fam_map, key=lambda n: (not n.startswith("EPL"), n.lower()))
+        self._loading = True
+        self.fams.Items.Clear()
+        for n in self.fam_names:
+            tb = TextBlock()
+            tb.Text = n
+            self.fams.Items.Add(tb)
+        self._loading = False
+        if self.fam_names:
+            self.fams.SelectedIndex = 0
+        else:
+            self.base_info.Text = "No family of this kind is loaded: starting from the EPL preset."
+            self.set_design(sy.preset(self.kind_key(), cfg))
+
+    def fam_picked(self, sender, args):
+        if self._loading or self.fams.SelectedIndex < 0:
+            return
+        name = self.fam_names[self.fams.SelectedIndex]
+        try:
+            d = sy.import_family(doc, self.fam_map[name], self.kind_key())
+        except Exception as ex:
+            self.base_info.Text = "could not read %s: %s" % (name, ex)
+            return
+        self.base_labels = [(lab.get("shows", "label"), lab["x"], lab["y"], lab["h"]) for lab in d["labels"]]
+        self.base_info.Text = "%d shapes, %d label(s): %s" % (
+            len(d["shapes"]), len(d["labels"]), ", ".join(l.get("shows", "") for l in d["labels"]) or "none")
+        if not name.startswith("EPL"):
+            d["name"] = sy.KIND[self.kind_key()][2]  # building makes an EPL copy by default
+        self.set_design(d)
 
     def set_design(self, d):
         self.design = d
         self.sel = None
         self.out_name.Text = d.get("name", "")
         self.out_folder.Text = d.get("folder", "")
-        if d.get("base"):
-            for name in self.families:
-                if name.endswith(": " + d["base"]):
-                    self.base.SelectedItem = name
         self.refresh_lists()
         self.redraw()
 
@@ -107,8 +120,8 @@ class Designer(forms.WPFWindow):
         self.set_design(sy.preset(self.kind_key(), cfg))
 
     def base_family(self):
-        f = self.families.get(self.base.Text) or self.families.get(str(self.base.SelectedItem))
-        return f
+        i = self.fams.SelectedIndex
+        return self.fam_map.get(self.fam_names[i]) if 0 <= i < len(self.fam_names) else None
 
     def read_labels(self, sender, args):
         fam = self.base_family()
@@ -218,6 +231,8 @@ class Designer(forms.WPFWindow):
             return "Dot  r%g" % s["r"]
         if t == "polygon":
             return "Polygon  %d points%s" % (len(s["pts"]), "  filled" if s.get("fill") else "")
+        if t == "arc":
+            return "Arc  r%g  %g-%g deg  pen %d" % (s["r"], s["a0"], s["a1"], s.get("pen", 1))
         return "Text '%s'  %gmm" % (s.get("text", ""), s.get("h", 2.5))
 
     def refresh_lists(self):
@@ -227,13 +242,16 @@ class Designer(forms.WPFWindow):
             self.shapes.Items.Add(self.describe(s))
         self.labels.Items.Clear()
         for i, lab in enumerate(self.design["labels"]):
-            name = self.base_labels[i][0] if i < len(self.base_labels) else "label %d" % (i + 1)
-            self.labels.Items.Add("%s  %gmm  (%g, %g)" % (name, lab["h"], lab["x"], lab["y"]))
+            self.labels.Items.Add(self._label_line(i, lab))
         if self.sel:
             lst = self.shapes if self.sel[0] == "shape" else self.labels
             lst.SelectedIndex = self.sel[1]
         self._loading = False
         self.fill_props()
+
+    def _label_line(self, i, lab):
+        name = lab.get("shows") or (self.base_labels[i][0] if i < len(self.base_labels) else "label %d" % (i + 1))
+        return "%s  %gmm %s (%g, %g)" % (name, lab["h"], lab.get("font", ""), lab["x"], lab["y"])
 
     def shape_picked(self, sender, args):
         if not self._loading and self.shapes.SelectedIndex >= 0:
@@ -300,6 +318,8 @@ class Designer(forms.WPFWindow):
                 self.f_h.Text = "%g" % item.get("h", 2.5)
                 self.f_font.Text = item.get("font", cfg["text"]["font"])
             is_label = self.sel[0] == "label"
+            self.f_sample.IsEnabled = is_label
+            self.f_sample.Text = item.get("sample", "") if is_label else ""
             self.f_box.IsEnabled = self.f_gap.IsEnabled = is_label
             self.f_box.IsChecked = bool(item.get("box")) if is_label else False
             self.f_gap.Text = "%g" % item.get("box_offset", 1.0) if is_label else ""
@@ -330,7 +350,7 @@ class Designer(forms.WPFWindow):
             if y is not None:
                 item["y"] = y
             if self.sel[0] == "shape":
-                if item["type"] in ("circle", "dot") and a:
+                if item["type"] in ("circle", "dot", "arc") and a:
                     item["r"] = a
                 if item["type"] in ("rect", "triangle"):
                     if a:
@@ -360,6 +380,7 @@ class Designer(forms.WPFWindow):
             if self.f_font.Text.strip():
                 item["font"] = self.f_font.Text.strip()
         if self.sel[0] == "label":
+            item["sample"] = self.f_sample.Text
             item["box"] = bool(self.f_box.IsChecked)
             gap = num(self.f_gap.Text)
             if gap is not None:
@@ -375,8 +396,7 @@ class Designer(forms.WPFWindow):
             self.shapes.SelectedIndex = i
         else:
             lab = self.design["labels"][i]
-            name = self.base_labels[i][0] if i < len(self.base_labels) else "label %d" % (i + 1)
-            self.labels.Items[i] = "%s  %gmm  (%g, %g)" % (name, lab["h"], lab["x"], lab["y"])
+            self.labels.Items[i] = self._label_line(i, lab)
             self.labels.SelectedIndex = i
         self._loading = False
 
@@ -430,19 +450,52 @@ class Designer(forms.WPFWindow):
         self._ln(ox - 12, oy, ox + 12, oy, red, 1)
         self._ln(ox, oy - 12, ox, oy + 12, red, 1)
 
+        self.draw_context()
         for i, s in enumerate(self.design["shapes"]):
             brush = BLUE if self.sel == ("shape", i) else Brushes.Black
             self.draw_shape(s, brush)
         for i, lab in enumerate(self.design["labels"]):
-            text = self.base_labels[i][0] if i < len(self.base_labels) else "LABEL %d" % (i + 1)
+            text = lab.get("sample") or (self.base_labels[i][0] if i < len(self.base_labels) else "LABEL %d" % (i + 1))
             self.draw_text(lab["x"], lab["y"], text, lab["h"],
                            BLUE if self.sel == ("label", i) else SolidColorBrush(Color.FromRgb(90, 90, 90)), True,
                            lab.get("box_offset", 1.0) if lab.get("box") else None)
+
+    def draw_context(self):
+        """What the symbol sits on in a drawing, in grey: grid / level /
+        section line, a leader, or the element a tag points at."""
+        grey = SolidColorBrush(Color.FromRgb(150, 150, 150))
+        k, w = self.kind_key(), self._pen_px(1)
+        ox, oy = self.to_px(0, 0)
+        z = self._z()
+        dash = [8.0, 3.0, 1.5, 3.0]
+        if k == "grid_head":
+            self._ln(ox, oy, ox, oy + 60 * z, grey, w, dash)
+        elif k == "level_head":
+            self._ln(ox, oy, ox - 80 * z, oy, grey, w, dash)
+        elif k in ("section_head", "section_tail"):
+            self._ln(ox, oy, ox, oy + 60 * z, grey, self._pen_px(3), dash)
+        elif k == "callout_head":
+            self._ln(ox, oy, ox - 20 * z, oy + 12 * z, grey, w)
+        elif k in ("rebar_tag", "column_tag", "beam_tag", "foundation_tag"):
+            r = Rectangle()
+            r.Width, r.Height = 40 * z, 6 * z
+            r.Stroke, r.StrokeThickness = grey, w
+            Canvas.SetLeft(r, ox - 20 * z)
+            Canvas.SetTop(r, oy + 12 * z)
+            self.canvas.Children.Add(r)
+            self._ln(ox, oy + 3 * z, ox, oy + 12 * z, grey, w)
 
     def draw_shape(self, s, brush):
         t, w = s["type"], self._pen_px(s.get("pen", 1))
         if t != "text":
             for p in sy.pieces(s):
+                if p["kind"] == "arc":
+                    pts = sy.arc_points(p)
+                    for i in range(len(pts) - 1):
+                        x1, y1 = self.to_px(*pts[i])
+                        x2, y2 = self.to_px(*pts[i + 1])
+                        self._ln(x1, y1, x2, y2, brush, w)
+                    continue
                 if p["kind"] == "circle":
                     e = Ellipse()
                     e.Width = e.Height = 2 * p["r"] * self._z()
@@ -583,7 +636,7 @@ class Designer(forms.WPFWindow):
     # ------------------------------------------------------------- build
     def _sync_out(self):
         fam = self.base_family()
-        self.design["base"] = fam.Name if fam else ""
+        self.design["base"] = fam.Name if fam else self.design.get("base", "")
         self.design["name"] = self.out_name.Text.strip()
         self.design["folder"] = self.out_folder.Text.strip()
         self.design["font"] = cfg["text"]["font"]
@@ -604,8 +657,14 @@ class Designer(forms.WPFWindow):
         try:
             sy.build(doc, self.design, mode, self.out_root.Text.strip(),
                      bool(self.save_file.IsChecked), bool(self.load_model.IsChecked), log.append)
+            if self.load_model.IsChecked:
+                built = self.design["name"] if mode == "copy" else self.design["base"]
+                log += sy.verify(doc, self.design, built, self.kind_key())
             self.status.Text = "\n".join(log) or "done"
-            self.families = sy.annotation_families(doc)
+            keep = self.design["name"]
+            self.kind_changed(None, None)
+            if keep in self.fam_names:
+                self.fams.SelectedIndex = self.fam_names.index(keep)
         except Exception as ex:
             self.status.Text = "FAILED: %s" % ex
         path = au.write_log(["Symbol Designer: %s" % self.design["name"]] + log, cfg, "symbol_designer")

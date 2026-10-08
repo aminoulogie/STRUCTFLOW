@@ -16,19 +16,18 @@
 
         <!-- left: what to design -->
         <DockPanel Grid.Column="0">
-            <GroupBox DockPanel.Dock="Top" Header="1  Symbol">
-                <ListBox x:Name="kinds" Height="300" SelectionChanged="kind_changed"/>
+            <GroupBox DockPanel.Dock="Top" Header="1  Symbol type">
+                <ComboBox x:Name="kinds" SelectionChanged="kind_changed"/>
             </GroupBox>
-            <GroupBox DockPanel.Dock="Top" Header="2  Base family (gives the labels)">
+            <GroupBox DockPanel.Dock="Top" Header="2  Loaded families - click one to see it">
                 <StackPanel>
-                    <ComboBox x:Name="base" IsEditable="True" IsTextSearchEnabled="True"/>
-                    <Button Content="Read its labels" Click="read_labels"/>
+                    <ListBox x:Name="fams" Height="300" SelectionChanged="fam_picked"/>
                     <TextBlock x:Name="base_info" Foreground="Gray" TextWrapping="Wrap"/>
                 </StackPanel>
             </GroupBox>
             <GroupBox DockPanel.Dock="Top" Header="Designs">
                 <WrapPanel>
-                    <Button Content="Reset to preset" Click="reset_preset"/>
+                    <Button Content="EPL preset" Click="reset_preset"/>
                     <Button Content="Open..." Click="open_design"/>
                     <Button Content="Save..." Click="save_design"/>
                 </WrapPanel>
@@ -83,6 +82,7 @@
                         <WrapPanel><TextBlock Text="Head" Width="55"/><TextBox x:Name="f_head" Width="60" TextChanged="prop_changed"/>
                                    <TextBlock Foreground="Gray" Text="arrow head length (mm)"/></WrapPanel>
                         <WrapPanel><TextBlock Text="Text" Width="55"/><TextBox x:Name="f_text" Width="200" TextChanged="prop_changed"/></WrapPanel>
+                        <WrapPanel><TextBlock Text="Sample" Width="55"/><TextBox x:Name="f_sample" Width="200" TextChanged="prop_changed"/></WrapPanel>
                         <CheckBox x:Name="f_box" Content="Box around the label (grows with the text)" Click="prop_changed"/>
                         <WrapPanel><TextBlock Text="Box gap" Width="55"/><TextBox x:Name="f_gap" Width="60" TextChanged="prop_changed"/>
                                    <TextBlock Foreground="Gray" Text="mm between text and box"/></WrapPanel>

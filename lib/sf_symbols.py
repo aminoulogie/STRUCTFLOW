@@ -180,7 +180,15 @@ def _raw_pieces(s):
         return [{"kind": "poly", "pts": triangle_points(s), "closed": True, "fill": fill}]
     if t == "polygon":
         return [{"kind": "poly", "pts": [tuple(p) for p in s["pts"]], "closed": s.get("closed", True), "fill": fill}]
+    if t == "arc":
+        return [{"kind": "arc", "x": s["x"], "y": s["y"], "r": s["r"], "a0": s["a0"], "a1": s["a1"], "fill": False}]
     return []
+
+
+def arc_points(p, n=24):
+    a0, a1 = math.radians(p["a0"]), math.radians(p["a1"])
+    return [(p["x"] + p["r"] * math.cos(a0 + (a1 - a0) * i / float(n)),
+             p["y"] + p["r"] * math.sin(a0 + (a1 - a0) * i / float(n))) for i in range(n + 1)]
 
 
 def _raw_box(s):
@@ -188,6 +196,8 @@ def _raw_box(s):
     for p in _raw_pieces(s):
         if p["kind"] == "circle":
             pts += [(p["x"] - p["r"], p["y"] - p["r"]), (p["x"] + p["r"], p["y"] + p["r"])]
+        elif p["kind"] == "arc":
+            pts += arc_points(p, 12)
         else:
             pts += p["pts"]
     if not pts:  # text
@@ -215,6 +225,9 @@ def pieces(s):
         q = dict(p)
         if p["kind"] == "circle":
             q["x"], q["y"] = turn(p["x"], p["y"])
+        elif p["kind"] == "arc":
+            q["x"], q["y"] = turn(p["x"], p["y"])
+            q["a0"], q["a1"] = p["a0"] + math.degrees(rot), p["a1"] + math.degrees(rot)
         else:
             q["pts"] = [turn(x, y) for x, y in p["pts"]]
         out.append(q)
@@ -227,6 +240,8 @@ def bounds(s):
     for p in pieces(s):
         if p["kind"] == "circle":
             pts += [(p["x"] - p["r"], p["y"] - p["r"]), (p["x"] + p["r"], p["y"] + p["r"])]
+        elif p["kind"] == "arc":
+            pts += arc_points(p, 12)
         else:
             pts += p["pts"]
     if not pts:
@@ -242,6 +257,9 @@ def move(s, dx, dy):
         s["y2"] += dy
     elif s["type"] == "polygon":
         s["pts"] = [[x + dx, y + dy] for x, y in s["pts"]]
+    elif s["type"] == "arc":
+        s["x"] += dx
+        s["y"] += dy
     else:
         s["x"] += dx
         s["y"] += dy
@@ -371,6 +389,11 @@ def _P(x, y):
 
 
 def _piece_curves(p):
+    if p["kind"] == "arc":
+        a0, a1 = math.radians(p["a0"]), math.radians(p["a1"])
+        if a1 <= a0:
+            a1 += 2 * math.pi
+        return [Arc.Create(_P(p["x"], p["y"]), p["r"] * MM, a0, a1, XYZ.BasisX, XYZ.BasisY)]
     if p["kind"] == "circle":
         c, r = _P(p["x"], p["y"]), p["r"] * MM
         return [Arc.Create(c, r, 0, math.pi, XYZ.BasisX, XYZ.BasisY),
@@ -440,6 +463,13 @@ def build(doc, design, mode, root, save_file, load, log):
                                 float(spec.get("box_offset", 1.0)))
                 lab.ChangeTypeId(lt.Id)
                 lab.Coord = _P(spec["x"], spec["y"])
+                if spec.get("sample"):
+                    try:
+                        fmts = list(lab.GetParameterFormatting())
+                        if fmts:
+                            fmts[0].SampleText = spec["sample"]
+                    except Exception:
+                        pass
             except Exception as ex:
                 log("label %d not restyled: %s" % (i + 1, br._err(ex)))
         cat = fdoc.OwnerFamily.FamilyCategory
@@ -467,3 +497,148 @@ def build(doc, design, mode, root, save_file, load, log):
             log("loaded '%s' into the model" % (name if save_file or mode == "overwrite" else base.Name))
     finally:
         fdoc.Close(False)
+
+
+
+# ------------------------------------------------------- read a real family
+KIND_CATEGORY = {
+    "grid_head": "OST_GridHeads", "level_head": "OST_LevelHeads", "section_head": "OST_SectionHeads",
+    "section_tail": "OST_SectionHeads", "callout_head": "OST_CalloutHeads",
+    "elevation_body": "OST_ElevationMarks", "elevation_pointer": "OST_ElevationMarks",
+    "view_title": "OST_ViewportLabel", "north_arrow": "OST_GenericAnnotation",
+    "spot_elevation": "OST_SpotElevSymbols", "span_direction": "OST_SpanDirectionSymbol",
+    "rebar_tag": "OST_RebarTags", "column_tag": "OST_StructuralColumnTags",
+    "beam_tag": "OST_StructuralFramingTags", "foundation_tag": "OST_StructuralFoundationTags",
+    "revision_tag": "OST_RevisionCloudTags", "generic": "OST_GenericAnnotation",
+}
+
+
+def families_of_kind(doc, kind):
+    """{name: Family} loaded in the model for this symbol kind."""
+    from Autodesk.Revit.DB import BuiltInCategory
+    bic = getattr(BuiltInCategory, KIND_CATEGORY.get(kind, "OST_GenericAnnotation"), None)
+    out = {}
+    for f in FilteredElementCollector(doc).OfClass(Family):
+        try:
+            if f.IsEditable and f.FamilyCategory is not None and br.is_category_id(f.FamilyCategory, bic):
+                out[f.Name] = f
+        except Exception:
+            pass
+    return out
+
+
+def _mm(v):
+    return round(v / MM, 3)
+
+
+def _pen_of(fdoc, ce):
+    """Line weight of the line style a curve is drawn with."""
+    try:
+        gs = ce.LineStyle
+        cat = gs.GraphicsStyleCategory if gs is not None else None
+        w = cat.GetLineWeight(GraphicsStyleType.Projection) if cat is not None else None
+        if not w and cat is not None and cat.Parent is not None:
+            w = cat.Parent.GetLineWeight(GraphicsStyleType.Projection)
+        return int(w or 1)
+    except Exception:
+        return 1
+
+
+def _ccw_angles(arc):
+    c = arc.Center
+    p0, p1, pm = arc.GetEndPoint(0), arc.GetEndPoint(1), arc.Evaluate(0.5, True)
+    ang = lambda p: math.atan2(p.Y - c.Y, p.X - c.X)
+    a0, a1, am = ang(p0), ang(p1), ang(pm)
+    norm = lambda a, base: a + 2 * math.pi * math.ceil((base - a) / (2 * math.pi)) if a < base else a
+    a1n, amn = norm(a1, a0), norm(am, a0)
+    if amn <= a1n:
+        return a0, a1n
+    return a1, norm(a0, a1)  # it ran clockwise: same arc, counter-clockwise from the other end
+
+
+def _curve_shape(c, pen):
+    if isinstance(c, Line):
+        p, q = c.GetEndPoint(0), c.GetEndPoint(1)
+        return {"type": "line", "x1": _mm(p.X), "y1": _mm(p.Y), "x2": _mm(q.X), "y2": _mm(q.Y), "pen": pen}
+    if isinstance(c, Arc):
+        if not c.IsBound:
+            return {"type": "circle", "x": _mm(c.Center.X), "y": _mm(c.Center.Y), "r": _mm(c.Radius),
+                    "pen": pen, "fill": False}
+        a0, a1 = _ccw_angles(c)
+        return {"type": "arc", "x": _mm(c.Center.X), "y": _mm(c.Center.Y), "r": _mm(c.Radius),
+                "a0": round(math.degrees(a0), 3), "a1": round(math.degrees(a1), 3), "pen": pen}
+    pts = [[_mm(p.X), _mm(p.Y)] for p in c.Tessellate()]
+    return {"type": "polygon", "pts": pts, "closed": False, "pen": pen, "fill": False}
+
+
+def import_family(doc, family, kind):
+    """The family as a design: its real lines, arcs, circles, fills, texts and
+    labels (with their fonts, heights, borders and sample text)."""
+    from Autodesk.Revit.DB import BuiltInCategory
+    fdoc = doc.EditFamily(family)
+    try:
+        shapes = []
+        for ce in FilteredElementCollector(fdoc).OfClass(CurveElement):
+            try:
+                if ce.Category is not None and br.is_category_id(ce.Category, BuiltInCategory.OST_SketchLines):
+                    continue
+                shapes.append(_curve_shape(ce.GeometryCurve, _pen_of(fdoc, ce)))
+            except Exception:
+                pass
+        for fr in FilteredElementCollector(fdoc).OfClass(FilledRegion):
+            for loop in fr.GetBoundaries():
+                pts = []
+                for c in loop:
+                    pts += [[_mm(p.X), _mm(p.Y)] for p in c.Tessellate()[:-1]]
+                if len(pts) >= 3:
+                    shapes.append({"type": "polygon", "pts": pts, "closed": True, "pen": 1, "fill": True})
+        for tn in FilteredElementCollector(fdoc).OfClass(TextNote):
+            shapes.append({"type": "text", "x": _mm(tn.Coord.X), "y": _mm(tn.Coord.Y), "text": tn.Text.strip(),
+                           "h": _text_height(fdoc, tn), "pen": 1})
+        labels = []
+        for lab in _labels(fdoc):
+            lt = fdoc.GetElement(lab.GetTypeId())
+            font = "Arial"
+            box, gap = False, 1.0
+            if lt is not None:
+                p = lt.get_Parameter(BuiltInParameter.TEXT_FONT)
+                font = (p.AsString() if p else None) or font
+                p = lt.get_Parameter(BuiltInParameter.TEXT_BOX_VISIBILITY)
+                box = bool(p.AsInteger()) if p else False
+                p = lt.get_Parameter(BuiltInParameter.LEADER_OFFSET_SHEET)
+                gap = _mm(p.AsDouble()) if p else 1.0
+            sample = ""
+            try:
+                fmts = list(lab.GetParameterFormatting())
+                sample = " ".join((f.SampleText or "") for f in fmts).strip()
+            except Exception:
+                pass
+            labels.append({"x": _mm(lab.Coord.X), "y": _mm(lab.Coord.Y), "h": _text_height(fdoc, lab),
+                           "font": font, "box": box, "box_offset": gap,
+                           "sample": sample or (lab.Text or "1"), "shows": _label_contents(fdoc, lab)})
+    finally:
+        fdoc.Close(False)
+    folder = KIND[kind][3] if kind in KIND else "01_ANNOTATION\\03_SYMBOLS"
+    return {"kind": kind, "name": family.Name, "folder": folder, "base": family.Name,
+            "shapes": shapes, "labels": labels}
+
+
+def verify(doc, design, family_name, kind):
+    """Read the built family back and list what Revit did not keep."""
+    fam = families_of_kind(doc, kind).get(family_name)
+    if fam is None:
+        return ["could not find '%s' in the model to check it" % family_name]
+    got = import_family(doc, fam, kind)
+    notes = []
+    want_geo = len([s for s in design["shapes"] if s["type"] != "text"])
+    have_geo = len([s for s in got["shapes"] if s["type"] != "text"])
+    if have_geo < want_geo:
+        notes.append("geometry: %d shapes asked, %d found" % (want_geo, have_geo))
+    for i, (w, h) in enumerate(zip(design.get("labels", []), got["labels"])):
+        for key in ("h", "font", "box"):
+            if key in w and str(w[key]) != str(h.get(key)) and not (
+                    key == "h" and abs(float(w[key]) - float(h[key])) < 0.01):
+                notes.append("label %d: Revit kept %s = %s (asked %s)" % (i + 1, key, h.get(key), w[key]))
+        if abs(float(w["x"]) - float(h["x"])) > 0.05 or abs(float(w["y"]) - float(h["y"])) > 0.05:
+            notes.append("label %d: position (%g, %g) asked, (%g, %g) kept" % (i + 1, w["x"], w["y"], h["x"], h["y"]))
+    return notes or ["checked: every shape and label setting was kept"]

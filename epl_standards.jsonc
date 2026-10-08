@@ -49,7 +49,7 @@
   "text": {
     "font": "Arial",
     // one text type per height: EPL_Text_2.5mm etc.
-    "heights": [1.8, 2.5, 3.5, 5.0, 7.0],
+    "heights": [1.8, 2.0, 2.5, 3.5, 5.0, 7.0, 10.0],
     "width_factor": 1.0,
     "colour": [0, 0, 0],
     "background": "Transparent",
@@ -76,9 +76,25 @@
   },
 
   // ------------------------------------- step 5: sheet and view symbols
+  // design answers (all black, print-first; Arial everywhere)
+  "symbol_design": {
+    "colour": [0, 0, 0],
+    "grid_bubble_mm": 8.0,
+    "grid_text_mm": 2.5,
+    "level_head": "filled triangle",
+    "level_text": "name + elevation",
+    "section_head": "letter with arrow only",
+    "section_head_mm": 10.0,
+    "view_title": "number circle + name + underline + scale",
+    "view_title_name_mm": 5.0,
+    "view_title_scale_mm": 2.5,
+    "dimension_tick": "diagonal",
+    // restyling an existing symbol family: ask each time (EPL copy or overwrite)
+    "originals": "ask"
+  },
   "symbols": {
     "view_title": "EPL_ANN_ViewTitle",
-    "grid_head": "EPL_ANN_GridHead_Circle-9mm",
+    "grid_head": "EPL_ANN_GridHead_Circle-8mm",
     "level_head": "EPL_ANN_LevelHead_Circle-8mm",
     "callout_head": "EPL_ANN_CalloutHead",
     "section_head": "EPL_ANN_SectionHead_Filled",

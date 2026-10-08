@@ -457,6 +457,13 @@ def build(doc, design, mode, root, save_file, load, log):
                 log("design has more labels than the base family (%d): extra ones ignored" % len(labels))
                 break
             lab = labels[i]
+            if spec.get("deleted"):
+                try:
+                    fdoc.Delete(lab.Id)
+                    log("label %d deleted" % (i + 1))
+                except Exception as ex:
+                    log("label %d not deleted: %s" % (i + 1, br._err(ex)))
+                continue
             try:
                 lt = _text_type(fdoc, fdoc.GetElement(lab.GetTypeId()), spec.get("font", "Arial"),
                                 float(spec.get("h", 2.5)), texts, bool(spec.get("box")),
@@ -642,3 +649,137 @@ def verify(doc, design, family_name, kind):
         if abs(float(w["x"]) - float(h["x"])) > 0.05 or abs(float(w["y"]) - float(h["y"])) > 0.05:
             notes.append("label %d: position (%g, %g) asked, (%g, %g) kept" % (i + 1, w["x"], w["y"], h["x"], h["y"]))
     return notes or ["checked: every shape and label setting was kept"]
+
+
+
+# ----------------------------------------------------------- preset choice
+def _wedge(cx, cy, r, a0, a1, n=8):
+    pts = [[cx, cy]]
+    for i in range(n + 1):
+        a = math.radians(a0 + (a1 - a0) * i / float(n))
+        pts.append([round(cx + r * math.cos(a), 3), round(cy + r * math.sin(a), 3)])
+    return {"type": "polygon", "pts": pts, "closed": True, "pen": 1, "fill": True}
+
+
+def preset_variants(kind, cfg=None):
+    """[(label, design)] starting points; the first is the EPL default."""
+    base = preset(kind, cfg)
+    out = [("EPL default", base)]
+    font = base["labels"][0]["font"] if base["labels"] else "Arial"
+    if kind == "level_head":
+        d = json.loads(json.dumps(base))
+        d["shapes"] = [_c(0, 0, 3, 1), _wedge(0, 0, 3, 90, 180), _wedge(0, 0, 3, 270, 360), _l(0, 0, 14, 0, 1)]
+        out.append(("Target circle", d))
+        d = json.loads(json.dumps(base))
+        d["shapes"] = [_l(0, 0, 14, 0, 1)]
+        out.append(("Text on the line", d))
+    elif kind == "grid_head":
+        for dia in (10.0, 12.0):
+            d = json.loads(json.dumps(base))
+            d["shapes"] = [_c(0, dia / 2, dia / 2, 1)]
+            d["labels"] = [_lab(0, dia / 2, 3.5, font)]
+            d["name"] = "EPL_ANN_GridHead_Circle-%gmm" % dia
+            out.append(("Circle %g mm" % dia, d))
+    elif kind == "section_head":
+        d = json.loads(json.dumps(base))
+        d["shapes"] = [_c(0, 5, 5, 1), _wedge(0, 5, 5, 180, 360), _l(0, 0, 0, 5, 2)]
+        d["labels"] = [_lab(0, 7, 3.5, font)]
+        out.append(("Half-filled circle", d))
+    elif kind == "view_title":
+        d = json.loads(json.dumps(base))
+        d["shapes"] = [_l(0, -0.5, 80, -0.5, 4)]
+        d["labels"] = [_lab(1, 3.5, 5.0, font), _lab(1, -2.75, 2.5, font)]
+        out.append(("Underline only", d))
+    elif kind in ("column_tag", "beam_tag", "foundation_tag"):
+        d = json.loads(json.dumps(base))
+        d["labels"] = [_lab(0, 0, 2.5, font)]
+        out.append(("No box", d))
+    return out
+
+
+# --------------------------------------------------------- delete family
+def family_in_use(doc, family):
+    from System.Collections.Generic import HashSet
+    unused = set(i for i in doc.GetAllUnusedElements(HashSet[ElementId]()))
+    return family.Id not in unused
+
+
+def delete_family(doc, family):
+    t = Transaction(doc, "StructFlow delete family")
+    t.Start()
+    try:
+        doc.Delete(family.Id)
+        t.Commit()
+    except Exception:
+        t.RollBack()
+        raise
+
+
+# --------------------------------------------- the line a datum head sits on
+# grid / level types (system families) own the line under a grid / level head
+DATUM_PARAMS = {
+    "grid": [("Center Segment", "segment"), ("Center Segment Weight", "pen"), ("Center Segment Color", "colour"),
+             ("Center Segment Pattern", "pattern"), ("End Segment Weight", "pen"), ("End Segment Color", "colour"),
+             ("End Segment Pattern", "pattern"), ("End Segments Length", "mm")],
+    "level": [("Line Weight", "pen"), ("Color", "colour"), ("Line Pattern", "pattern")],
+}
+SEGMENTS = ["Continuous", "None", "Custom"]
+
+
+def datum_types(doc, kind):
+    from Autodesk.Revit.DB import GridType, LevelType
+    cls = GridType if kind == "grid_head" else LevelType
+    return dict((br.ename(t), t) for t in FilteredElementCollector(doc).OfClass(cls))
+
+
+def read_datum(doc, t, kind):
+    from Autodesk.Revit.DB import LinePatternElement
+    v = {}
+    for name, k in DATUM_PARAMS["grid" if kind == "grid_head" else "level"]:
+        p = t.LookupParameter(name)
+        if p is None:
+            continue
+        if k == "pattern":
+            pid = p.AsElementId()
+            el = doc.GetElement(pid) if pid != ElementId.InvalidElementId else None
+            v[name] = el.Name if el is not None else "Solid"
+        elif k == "colour":
+            c = p.AsInteger()
+            v[name] = "%d,%d,%d" % (c & 255, (c >> 8) & 255, (c >> 16) & 255)
+        elif k == "mm":
+            v[name] = round(p.AsDouble() / MM, 2)
+        else:
+            v[name] = p.AsInteger()
+    return v
+
+
+def write_datum(doc, t, kind, values):
+    """Write the line settings to the grid / level type; returns what Revit refused."""
+    from Autodesk.Revit.DB import LinePatternElement
+    patterns = dict((lp.Name, lp.Id) for lp in FilteredElementCollector(doc).OfClass(LinePatternElement))
+    patterns["Solid"] = LinePatternElement.GetSolidPatternId()
+    kinds = dict(DATUM_PARAMS["grid" if kind == "grid_head" else "level"])
+    tr = Transaction(doc, "StructFlow datum line")
+    tr.Start()
+    try:
+        for name, val in values.items():
+            p = t.LookupParameter(name)
+            if p is None or p.IsReadOnly:
+                continue
+            k = kinds[name]
+            if k == "pattern":
+                p.Set(patterns.get(val, LinePatternElement.GetSolidPatternId()))
+            elif k == "colour":
+                r, g, b = [int(x) for x in str(val).split(",")]
+                p.Set(r + g * 256 + b * 65536)
+            elif k == "mm":
+                p.Set(float(val) * MM)
+            else:
+                p.Set(int(val))
+        tr.Commit()
+    except Exception:
+        tr.RollBack()
+        raise
+    got = read_datum(doc, t, kind)
+    return ["Revit kept %s = %s (asked %s)" % (n, got.get(n), v) for n, v in values.items()
+            if n in got and str(got.get(n)) != str(v)]

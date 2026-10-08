@@ -1,7 +1,7 @@
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="StructFlow - Symbol Designer" Width="1280" Height="780"
-        WindowStartupLocation="CenterScreen" FontSize="12">
+        WindowStartupLocation="CenterScreen" FontSize="12" PreviewKeyDown="key_down">
     <Window.Resources>
         <Style TargetType="TextBlock"><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="0,0,6,0"/></Style>
         <Style TargetType="TextBox"><Setter Property="Margin" Value="0,2,8,2"/></Style>
@@ -21,13 +21,15 @@
             </GroupBox>
             <GroupBox DockPanel.Dock="Top" Header="2  Loaded families - click one to see it">
                 <StackPanel>
-                    <ListBox x:Name="fams" Height="300" SelectionChanged="fam_picked"/>
+                    <ListBox x:Name="fams" Height="260" SelectionChanged="fam_picked"/>
+                    <Button Content="Delete this family..." Click="delete_family_click"/>
                     <TextBlock x:Name="base_info" Foreground="Gray" TextWrapping="Wrap"/>
                 </StackPanel>
             </GroupBox>
             <GroupBox DockPanel.Dock="Top" Header="Designs">
                 <WrapPanel>
-                    <Button Content="EPL preset" Click="reset_preset"/>
+                    <ComboBox x:Name="presets" Width="140"/>
+                    <Button Content="Start from it" Click="reset_preset"/>
                     <Button Content="Open..." Click="open_design"/>
                     <Button Content="Save..." Click="save_design"/>
                 </WrapPanel>
@@ -47,16 +49,20 @@
                 <Button Content="Text" Click="add_text"/>
                 <Button Content="Rotate -15" Click="rot_left"/><Button Content="Rotate +15" Click="rot_right"/>
                 <Button Content="Duplicate" Click="duplicate"/><Button Content="Delete" Click="delete"/>
+                <Button Content="Undo" Click="undo"/><Button Content="Redo" Click="redo"/>
             </WrapPanel>
             <WrapPanel DockPanel.Dock="Bottom">
                 <TextBlock Text="Zoom"/>
-                <Slider x:Name="zoom" Width="180" Minimum="4" Maximum="40" Value="14" VerticalAlignment="Center" ValueChanged="zoom_changed"/>
+                <Slider x:Name="zoom" Width="180" Minimum="2" Maximum="80" Value="14" VerticalAlignment="Center" ValueChanged="zoom_changed"/>
+                <Button Content="Fit" Click="fit_view"/>
+                <TextBlock Foreground="Gray" Text="wheel = zoom, hold wheel = pan, Ctrl+Z / Ctrl+Y, Del"/>
                 <CheckBox x:Name="snap" Content="Snap 0.5 mm" IsChecked="True" VerticalAlignment="Center" Margin="10,0,0,0"/>
                 <TextBlock x:Name="cursor" Foreground="Gray" Margin="16,0,0,0"/>
             </WrapPanel>
             <Border BorderBrush="Gainsboro" BorderThickness="1" ClipToBounds="True">
                 <Canvas x:Name="canvas" Background="White" ClipToBounds="True"
-                        MouseLeftButtonDown="canvas_down" MouseMove="canvas_move" MouseLeftButtonUp="canvas_up"/>
+                        MouseLeftButtonDown="canvas_down" MouseMove="canvas_move" MouseLeftButtonUp="canvas_up"
+                        MouseWheel="canvas_wheel" MouseDown="canvas_any_down" MouseUp="canvas_any_up"/>
             </Border>
         </DockPanel>
 
@@ -88,6 +94,14 @@
                                    <TextBlock Foreground="Gray" Text="mm between text and box"/></WrapPanel>
                         <WrapPanel><TextBlock Text="Height" Width="55"/><ComboBox x:Name="f_h" Width="70" IsEditable="True" SelectionChanged="prop_changed" KeyUp="prop_changed"/>
                                    <TextBlock Text="Font"/><TextBox x:Name="f_font" Width="90" TextChanged="prop_changed"/></WrapPanel>
+                    </StackPanel>
+                </GroupBox>
+                <GroupBox x:Name="datum_box" Header="Line attached (grid / level type)">
+                    <StackPanel>
+                        <WrapPanel><TextBlock Text="Type" Width="55"/><ComboBox x:Name="d_type" Width="220" SelectionChanged="datum_type_changed"/></WrapPanel>
+                        <StackPanel x:Name="datum_fields"/>
+                        <Button Content="Apply to this type" Click="datum_apply"/>
+                        <TextBlock x:Name="d_status" Foreground="Gray" TextWrapping="Wrap"/>
                     </StackPanel>
                 </GroupBox>
                 <GroupBox Header="3  Build">

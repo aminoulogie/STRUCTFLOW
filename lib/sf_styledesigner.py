@@ -4,13 +4,15 @@ The preview is drawn at paper size (x zoom) with your pen table; Apply
 writes the values to the Revit type, Save as new duplicates it first."""
 import math
 import os
+import time
 
 import clr
 clr.AddReference("PresentationCore")
 clr.AddReference("PresentationFramework")
 clr.AddReference("WindowsBase")
 from System.Windows import FontStyles, FontWeights, Point, Size, TextDecorations
-from System.Windows.Controls import Canvas, TextBlock
+from System.Windows.Controls import Canvas, CheckBox, ComboBox, TextBlock, TextBox
+from System.Windows.Input import Key, Keyboard, ModifierKeys, MouseButton
 from System.Windows.Media import Brushes, Color, FontFamily, PointCollection, SolidColorBrush
 from System.Windows.Shapes import Ellipse, Line, Polygon, Rectangle
 
@@ -136,6 +138,10 @@ class StyleDesigner(forms.WPFWindow):
         self.cfg = au.load_config()
         self.pens = self.cfg["line_weights"]["annotation"]
         self._loading = True
+        self.pan = [0.0, 0.0]
+        self.panning = None
+        self.hist, self.future = [], []
+        self._t_last = 0.0
         self.heads = arrowheads(doc)
         for k in KINDS:
             self.kind.Items.Add(k)
@@ -233,6 +239,7 @@ class StyleDesigner(forms.WPFWindow):
             self.t_pen.SelectedItem = str(tv.get("heavy_pen", 4))
             self.new_name.Text = (br.ename(el) or "EPL_Tick") + " copy"
             self._loading = False
+            self.hist, self.future = [self.fields()], []
             self.redraw()
             return
         v = read(self.doc, el, self.is_dim)
@@ -254,6 +261,7 @@ class StyleDesigner(forms.WPFWindow):
             combo.SelectedItem = name[0] if name else "(none)"
         self.new_name.Text = br.ename(el) + " copy"
         self._loading = False
+        self.hist, self.future = [self.fields()], []
         self.redraw()
 
     def tick_values(self):
@@ -295,10 +303,139 @@ class StyleDesigner(forms.WPFWindow):
             sender.Text = str(picked[0])
         if sender is self.tick:
             self._tick_touched = True
+        self.remember()
         self.redraw()
 
     def redraw_evt(self, sender, args):
         self.redraw()
+
+    # ------------------------------------------------- undo / redo
+    FIELD_NAMES = ["font", "size", "width", "bold", "italic", "underline", "colour", "pen", "opaque",
+                   "tick", "tick_pen", "gap", "ext", "dimext", "offset", "prefix", "suffix", "sample",
+                   "border", "border_offset", "leader", "sample_text",
+                   "t_style", "t_size", "t_angle", "t_filled", "t_closed", "t_pen"]
+
+    def fields(self):
+        state = {}
+        for n in self.FIELD_NAMES:
+            c = getattr(self, n)
+            if isinstance(c, CheckBox):
+                state[n] = bool(c.IsChecked)
+            elif isinstance(c, ComboBox):
+                state[n] = str(c.SelectedItem) if (c.SelectedItem is not None and not c.IsEditable) else c.Text
+            else:
+                state[n] = c.Text
+        return state
+
+    def set_fields(self, state):
+        self._loading = True
+        for n, v in state.items():
+            c = getattr(self, n)
+            if isinstance(c, CheckBox):
+                c.IsChecked = v
+            elif isinstance(c, ComboBox):
+                if v in [str(i) for i in c.Items]:
+                    c.SelectedItem = [i for i in c.Items if str(i) == v][0]
+                c.Text = v if c.IsEditable else c.Text
+            else:
+                c.Text = v
+        self._loading = False
+        self.redraw()
+
+    def remember(self):
+        state = self.fields()
+        if self.hist and state == self.hist[-1]:
+            return
+        now = time.time()
+        if self.hist and len(self.hist) > 1 and now - self._t_last < 0.8:
+            self.hist[-1] = state  # typing: one step
+        else:
+            self.hist.append(state)
+        self.future = []
+        self._t_last = now
+
+    def undo(self, sender=None, args=None):
+        if len(self.hist) > 1:
+            self.future.append(self.hist.pop())
+            self.set_fields(self.hist[-1])
+
+    def redo(self, sender=None, args=None):
+        if self.future:
+            self.hist.append(self.future.pop())
+            self.set_fields(self.hist[-1])
+
+    def key_down(self, sender, args):
+        ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control
+        if isinstance(Keyboard.FocusedElement, TextBox) and not ctrl:
+            return
+        if ctrl and args.Key == Key.Z and not isinstance(Keyboard.FocusedElement, TextBox):
+            self.undo()
+            args.Handled = True
+        elif ctrl and args.Key == Key.Y and not isinstance(Keyboard.FocusedElement, TextBox):
+            self.redo()
+            args.Handled = True
+
+    # ------------------------------------------------- zoom / pan
+    def canvas_wheel(self, sender, args):
+        p = args.GetPosition(self.canvas)
+        old = float(self.zoom.Value)
+        new = max(self.zoom.Minimum, min(self.zoom.Maximum, old * (1.15 if args.Delta > 0 else 1 / 1.15)))
+        cx, cy = self.canvas.ActualWidth / 2.0 + self.pan[0], self.canvas.ActualHeight / 2.0 + self.pan[1]
+        k = new / old  # keep the point under the mouse still
+        self.pan[0] += (p.X - cx) * (1 - k)
+        self.pan[1] += (p.Y - cy) * (1 - k)
+        self.zoom.Value = new
+        args.Handled = True
+
+    def canvas_down(self, sender, args):
+        if args.ChangedButton == MouseButton.Middle:
+            p = args.GetPosition(self.canvas)
+            self.panning = (p.X, p.Y)
+            self.canvas.CaptureMouse()
+
+    def canvas_move(self, sender, args):
+        if self.panning:
+            p = args.GetPosition(self.canvas)
+            self.pan[0] += p.X - self.panning[0]
+            self.pan[1] += p.Y - self.panning[1]
+            self.panning = (p.X, p.Y)
+            self.redraw()
+
+    def canvas_up(self, sender, args):
+        if self.panning and args.ChangedButton == MouseButton.Middle:
+            self.panning = None
+            self.canvas.ReleaseMouseCapture()
+
+    def fit_view(self, sender, args):
+        self.pan = [0.0, 0.0]
+        self.zoom.Value = 10
+
+    # ------------------------------------------------- delete the type
+    def delete_type_click(self, sender, args):
+        el = self.current()
+        if el is None:
+            return
+        import sf_systypes as st
+        n = len(st.users(self.doc, el)) if not self.is_tick else 0
+        name = br.ename(el) or "(no name) #%s" % el.Id
+        msg = "Delete '%s'?" % name
+        if n:
+            msg += ("\n\n%d element(s) use it and would be deleted too. Use System Types > Merge "
+                    "to move them to another type first." % n)
+        if self.is_tick:
+            msg += "\n\nDimension / text styles using this tick will lose it - re-pick a tick on them."
+        if not forms.alert(msg, yes=True, no=True, title="StructFlow Style Designer"):
+            return
+        t = Transaction(self.doc, "StructFlow delete type")
+        t.Start()
+        try:
+            self.doc.Delete(el.Id)
+            t.Commit()
+            self.status.Text = "deleted %s" % name
+        except Exception as ex:
+            t.RollBack()
+            self.status.Text = "not deleted: %s" % br._err(ex)
+        self.kind_changed(None, None)
 
     # --------------------------------------------------------- preview
     def _pen(self, pen):
@@ -387,7 +524,7 @@ class StyleDesigner(forms.WPFWindow):
             return
         z = float(self.zoom.Value)
         W, H = c.ActualWidth, c.ActualHeight
-        cx, cy = W / 2.0, H / 2.0
+        cx, cy = W / 2.0 + self.pan[0], H / 2.0 + self.pan[1]
         brush = self._brush(v["colour"])
         grey = SolidColorBrush(Color.FromRgb(160, 160, 160))
         if self.is_dim:
@@ -425,7 +562,7 @@ class StyleDesigner(forms.WPFWindow):
         c, z = self.canvas, float(self.zoom.Value)
         v = self.tick_values()
         W, H = c.ActualWidth, c.ActualHeight
-        cx, cy = W / 2.0, H / 2.0
+        cx, cy = W / 2.0 + self.pan[0], H / 2.0 + self.pan[1]
         half = min(W * 0.35, 30 * z)
         k = Brushes.Black
         self._ln(cx - half, cy, cx + half, cy, k, self._pen(1))

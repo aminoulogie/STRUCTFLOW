@@ -7,20 +7,25 @@ base family you pick. Builds the family, saves it into the EPL library
 and loads it into the model."""
 __title__ = "Symbol\nDesigner"
 
+import json
 import os
+import time
 
 import clr
 clr.AddReference("PresentationCore")
 clr.AddReference("PresentationFramework")
 clr.AddReference("WindowsBase")
 from System.Windows import Point, Size
-from System.Windows.Controls import Canvas, TextBlock
+from System.Windows.Controls import Canvas, ComboBox, TextBlock, TextBox, WrapPanel
+from System.Windows.Input import Key, Keyboard, ModifierKeys, MouseButton
 from System.Windows.Media import Brushes, Color, DoubleCollection, FontFamily, PointCollection, SolidColorBrush
 from System.Windows.Shapes import Ellipse, Line, Polygon, Rectangle
 
 from pyrevit import forms, revit, script
 
 import sf_audit as au
+import sf_preview as pv
+import sf_profiles as sp
 import sf_symbols as sy
 
 doc = revit.doc
@@ -58,6 +63,13 @@ class Designer(forms.WPFWindow):
         self.base_labels = []
         self.fam_map = {}
         self.fam_names = []
+        self.pan = [0.0, 0.0]
+        self.panning = None
+        self.history, self.future = [], []
+        self._last_snap = 0.0
+        self.datum = {}
+        self.datum_ctrls = {}
+        self.dashes = sp.line_dashes(doc)
         for k in sy.KINDS:
             self.kinds.Items.Add(k[1])
         for i in range(1, 17):
@@ -77,6 +89,12 @@ class Designer(forms.WPFWindow):
 
     def kind_changed(self, sender, args):
         """List every loaded family of this kind; the first EPL one opens."""
+        self.variants = sy.preset_variants(self.kind_key(), cfg)
+        self.presets.Items.Clear()
+        for label, _ in self.variants:
+            self.presets.Items.Add(label)
+        self.presets.SelectedIndex = 0
+        self.setup_datum()
         self.fam_map = sy.families_of_kind(doc, self.kind_key())
         self.fam_names = sorted(self.fam_map, key=lambda n: (not n.startswith("EPL"), n.lower()))
         self._loading = True
@@ -117,7 +135,161 @@ class Designer(forms.WPFWindow):
         self.redraw()
 
     def reset_preset(self, sender, args):
-        self.set_design(sy.preset(self.kind_key(), cfg))
+        self.snapshot(force=True)
+        i = max(self.presets.SelectedIndex, 0)
+        d = json.loads(json.dumps(self.variants[i][1]))
+        fam = self.base_family()
+        d["base"] = fam.Name if fam else ""
+        self.set_design(d)
+
+    # ------------------------------------------------- undo / redo
+    def snapshot(self, force=False):
+        if self.design is None:
+            return
+        now = time.time()
+        if not force and now - self._last_snap < 0.8:
+            return  # typing in a field: one undo step, not one per key
+        state = json.dumps(self.design)
+        if not self.history or self.history[-1] != state:
+            self.history.append(state)
+            del self.history[:-100]
+            self.future = []
+        self._last_snap = now
+
+    def _restore(self, state):
+        self.design = json.loads(state)
+        self.sel = None
+        self.refresh_lists()
+        self.redraw()
+
+    def undo(self, sender=None, args=None):
+        if self.history:
+            current = json.dumps(self.design)
+            state = self.history.pop()
+            if state == current and self.history:
+                state = self.history.pop()
+            self.future.append(current)
+            self._restore(state)
+
+    def redo(self, sender=None, args=None):
+        if self.future:
+            self.history.append(json.dumps(self.design))
+            self._restore(self.future.pop())
+
+    def key_down(self, sender, args):
+        if isinstance(Keyboard.FocusedElement, TextBox):
+            return  # let the text box handle its own keys
+        ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control
+        if ctrl and args.Key == Key.Z:
+            self.undo()
+            args.Handled = True
+        elif ctrl and args.Key == Key.Y:
+            self.redo()
+            args.Handled = True
+        elif args.Key == Key.Delete:
+            self.delete(None, None)
+            args.Handled = True
+
+    # ------------------------------------------------- delete family
+    def delete_family_click(self, sender, args):
+        fam = self.base_family()
+        if fam is None:
+            return
+        used = sy.family_in_use(doc, fam)
+        msg = "Delete the family '%s' from the model?" % fam.Name
+        if used:
+            msg += ("\n\nIt is IN USE (placed, or set on a grid / level / view type). Deleting it can "
+                    "remove those symbols or the elements using them.")
+        if not forms.alert(msg, yes=True, no=True, title="StructFlow Symbol Designer"):
+            return
+        try:
+            sy.delete_family(doc, fam)
+            self.status.Text = "deleted %s (Ctrl+Z in Revit to undo)" % fam.Name
+        except Exception as ex:
+            self.status.Text = "not deleted: %s" % ex
+        self.kind_changed(None, None)
+
+    # ------------------------------------------------- the attached line
+    def setup_datum(self):
+        from System.Windows import Visibility
+        k = self.kind_key()
+        on = k in ("grid_head", "level_head")
+        self.datum_box.Visibility = Visibility.Visible if on else Visibility.Collapsed
+        if not on:
+            self.datum = {}
+            return
+        self.datum_types = sy.datum_types(doc, k)
+        self.d_type.Items.Clear()
+        for n in sorted(self.datum_types):
+            self.d_type.Items.Add(n)
+        if self.d_type.Items.Count:
+            self.d_type.SelectedIndex = 0
+
+    def datum_type_changed(self, sender, args):
+        name = self.d_type.SelectedItem
+        if name is None:
+            return
+        k = self.kind_key()
+        self.datum = sy.read_datum(doc, self.datum_types[str(name)], k)
+        self.datum_fields.Children.Clear()
+        self.datum_ctrls = {}
+        patterns = sorted(self.dashes)
+        for pname, kind in sy.DATUM_PARAMS["grid" if k == "grid_head" else "level"]:
+            if pname not in self.datum:
+                continue
+            row = WrapPanel()
+            tb = TextBlock()
+            tb.Text, tb.Width = pname.replace("Segment", "seg."), 120
+            row.Children.Add(tb)
+            if kind in ("pen", "pattern", "segment"):
+                ctrl = ComboBox()
+                ctrl.Width = 150 if kind == "pattern" else 100
+                items = ([str(i) for i in range(1, 17)] if kind == "pen" else
+                         patterns if kind == "pattern" else sy.SEGMENTS)
+                for it in items:
+                    ctrl.Items.Add(it)
+                val = self.datum[pname]
+                ctrl.SelectedItem = (sy.SEGMENTS[val] if kind == "segment" and 0 <= val < 3 else str(val))
+                ctrl.SelectionChanged += self._datum_edit
+            else:
+                ctrl = TextBox()
+                ctrl.Width = 100
+                ctrl.Text = str(self.datum[pname])
+                ctrl.TextChanged += self._datum_edit
+            row.Children.Add(ctrl)
+            self.datum_fields.Children.Add(row)
+            self.datum_ctrls[pname] = (kind, ctrl)
+        self.redraw()
+
+    def datum_values(self):
+        out = {}
+        for pname, (kind, ctrl) in self.datum_ctrls.items():
+            if kind in ("pen", "pattern", "segment"):
+                val = ctrl.SelectedItem
+                if val is None:
+                    continue
+                out[pname] = sy.SEGMENTS.index(str(val)) if kind == "segment" else (
+                    int(str(val)) if kind == "pen" else str(val))
+            else:
+                v = ctrl.Text.strip()
+                out[pname] = v if kind == "colour" else num(v, 0)
+        return out
+
+    def _datum_edit(self, sender, args):
+        merged = dict(self.datum)
+        merged.update(self.datum_values())
+        self.datum = merged
+        self.redraw()
+
+    def datum_apply(self, sender, args):
+        name = self.d_type.SelectedItem
+        if name is None:
+            return
+        try:
+            notes = sy.write_datum(doc, self.datum_types[str(name)], self.kind_key(), self.datum_values())
+            self.d_status.Text = "\n".join(notes) or "applied to %s - checked, every value kept" % name
+        except Exception as ex:
+            self.d_status.Text = "not applied: %s" % ex
 
     def base_family(self):
         i = self.fams.SelectedIndex
@@ -158,6 +330,7 @@ class Designer(forms.WPFWindow):
 
     # ------------------------------------------------------------ shapes
     def _add(self, s):
+        self.snapshot(force=True)
         self.design["shapes"].append(s)
         self.sel = ("shape", len(self.design["shapes"]) - 1)
         self.refresh_lists()
@@ -187,6 +360,7 @@ class Designer(forms.WPFWindow):
     def _rotate(self, deg):
         item = self.current()
         if item is not None and self.sel[0] == "shape":
+            self.snapshot(force=True)
             item["rot"] = (float(item.get("rot", 0) or 0) + deg) % 360
             self.fill_props()
             self._update_list_text()
@@ -208,7 +382,17 @@ class Designer(forms.WPFWindow):
             self._add(s)
 
     def delete(self, sender, args):
+        if self.sel and self.sel[0] == "label":
+            self.snapshot(force=True)
+            lab = self.design["labels"][self.sel[1]]
+            lab["deleted"] = not lab.get("deleted")
+            self.status.Text = ("label marked for deletion (Revit can delete labels but cannot make new ones)"
+                                if lab["deleted"] else "label kept")
+            self.refresh_lists()
+            self.redraw()
+            return
         if self.sel and self.sel[0] == "shape":
+            self.snapshot(force=True)
             del self.design["shapes"][self.sel[1]]
             self.sel = None
             self.refresh_lists()
@@ -251,6 +435,8 @@ class Designer(forms.WPFWindow):
 
     def _label_line(self, i, lab):
         name = lab.get("shows") or (self.base_labels[i][0] if i < len(self.base_labels) else "label %d" % (i + 1))
+        if lab.get("deleted"):
+            return "[DELETE] %s" % name
         return "%s  %gmm %s (%g, %g)" % (name, lab["h"], lab.get("font", ""), lab["x"], lab["y"])
 
     def shape_picked(self, sender, args):
@@ -331,6 +517,7 @@ class Designer(forms.WPFWindow):
         item = self.current()
         if item is None:
             return
+        self.snapshot()
         x, y, a, b = num(self.f_x.Text), num(self.f_y.Text), num(self.f_a.Text), num(self.f_b.Text)
         if self.sel[0] == "shape" and item["type"] in ("line", "arrow"):
             for k, v in zip(("x1", "y1", "x2", "y2"), (x, y, a, b)):
@@ -405,7 +592,35 @@ class Designer(forms.WPFWindow):
         return float(self.zoom.Value)
 
     def _origin(self):
-        return self.canvas.ActualWidth / 2.0, self.canvas.ActualHeight / 2.0
+        return self.canvas.ActualWidth / 2.0 + self.pan[0], self.canvas.ActualHeight / 2.0 + self.pan[1]
+
+    def canvas_wheel(self, sender, args):
+        p = args.GetPosition(self.canvas)
+        mx, my = self.to_mm(p.X, p.Y)
+        z = self._z() * (1.15 if args.Delta > 0 else 1 / 1.15)
+        self.zoom.Value = max(self.zoom.Minimum, min(self.zoom.Maximum, z))
+        nx, ny = self.to_px(mx, my)  # keep the point under the mouse still
+        self.pan[0] += p.X - nx
+        self.pan[1] += p.Y - ny
+        self.redraw()
+        args.Handled = True
+
+    def canvas_any_down(self, sender, args):
+        if args.ChangedButton == MouseButton.Middle:
+            p = args.GetPosition(self.canvas)
+            self.panning = (p.X, p.Y)
+            self.canvas.CaptureMouse()
+            args.Handled = True
+
+    def canvas_any_up(self, sender, args):
+        if args.ChangedButton == MouseButton.Middle and self.panning:
+            self.panning = None
+            self.canvas.ReleaseMouseCapture()
+
+    def fit_view(self, sender, args):
+        self.pan = [0.0, 0.0]
+        self.zoom.Value = 14
+        self.redraw()
 
     def to_px(self, x, y):
         ox, oy = self._origin()
@@ -455,6 +670,8 @@ class Designer(forms.WPFWindow):
             brush = BLUE if self.sel == ("shape", i) else Brushes.Black
             self.draw_shape(s, brush)
         for i, lab in enumerate(self.design["labels"]):
+            if lab.get("deleted"):
+                continue
             text = lab.get("sample") or (self.base_labels[i][0] if i < len(self.base_labels) else "LABEL %d" % (i + 1))
             self.draw_text(lab["x"], lab["y"], text, lab["h"],
                            BLUE if self.sel == ("label", i) else SolidColorBrush(Color.FromRgb(90, 90, 90)), True,
@@ -468,7 +685,25 @@ class Designer(forms.WPFWindow):
         ox, oy = self.to_px(0, 0)
         z = self._z()
         dash = [8.0, 3.0, 1.5, 3.0]
-        if k == "grid_head":
+        if k in ("grid_head", "level_head") and self.datum:
+            pen_key = "Center Segment Weight" if k == "grid_head" else "Line Weight"
+            col_key = "Center Segment Color" if k == "grid_head" else "Color"
+            pat_key = "Center Segment Pattern" if k == "grid_head" else "Line Pattern"
+            try:
+                r, g, b = [int(v) for v in str(self.datum.get(col_key, "0,0,0")).split(",")]
+                brush = SolidColorBrush(Color.FromRgb(r, g, b))
+            except Exception:
+                brush = grey
+            lw = self._pen_px(self.datum.get(pen_key, 1))
+            segs = self.dashes.get(str(self.datum.get(pat_key, "Solid")))
+            dash_real = pv.dash_values(segs, lw) if segs else None
+            if dash_real:
+                dash_real = [v * z / pv.PX_PER_PAPER_MM for v in dash_real]
+            if k == "grid_head":
+                self._ln(ox, oy, ox, oy + 60 * z, brush, lw, dash_real)
+            else:
+                self._ln(ox, oy, ox - 80 * z, oy, brush, lw, dash_real)
+        elif k == "grid_head":
             self._ln(ox, oy, ox, oy + 60 * z, grey, w, dash)
         elif k == "level_head":
             self._ln(ox, oy, ox - 80 * z, oy, grey, w, dash)
@@ -600,12 +835,20 @@ class Designer(forms.WPFWindow):
         self.sel = self._hit(mx, my)
         self.drag = (mx, my) if self.sel else None
         if self.sel:
+            self.snapshot(force=True)
+        if self.sel:
             self.canvas.CaptureMouse()
         self.refresh_lists()
         self.redraw()
 
     def canvas_move(self, sender, args):
         p = args.GetPosition(self.canvas)
+        if self.panning:
+            self.pan[0] += p.X - self.panning[0]
+            self.pan[1] += p.Y - self.panning[1]
+            self.panning = (p.X, p.Y)
+            self.redraw()
+            return
         mx, my = self.to_mm(p.X, p.Y)
         self.cursor.Text = "x %.1f   y %.1f mm" % (mx, my)
         if not self.drag or not self.sel:

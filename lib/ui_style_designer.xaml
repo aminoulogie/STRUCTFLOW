@@ -1,7 +1,7 @@
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="StructFlow - Style Designer" Width="1180" Height="720"
-        WindowStartupLocation="CenterScreen" FontSize="12">
+        WindowStartupLocation="CenterScreen" FontSize="12" PreviewKeyDown="key_down">
     <Window.Resources>
         <Style TargetType="TextBlock"><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="0,0,6,0"/></Style>
         <Style TargetType="TextBox"><Setter Property="Margin" Value="0,2,6,2"/><Setter Property="Width" Value="70"/></Style>
@@ -15,16 +15,19 @@
         </Grid.ColumnDefinitions>
         <DockPanel Grid.Column="0">
             <ComboBox x:Name="kind" DockPanel.Dock="Top" SelectionChanged="kind_changed"/>
+            <Button DockPanel.Dock="Bottom" Content="Delete this type..." Click="delete_type_click"/>
             <ListBox x:Name="types" SelectionChanged="type_changed"/>
         </DockPanel>
         <DockPanel Grid.Column="2">
             <WrapPanel DockPanel.Dock="Bottom">
                 <TextBlock Text="Zoom"/>
-                <Slider x:Name="zoom" Width="200" Minimum="3" Maximum="30" Value="10" VerticalAlignment="Center" ValueChanged="redraw_evt"/>
-                <TextBlock Foreground="Gray" Text="  preview at paper size x zoom - pens from your line weight table"/>
+                <Slider x:Name="zoom" Width="160" Minimum="2" Maximum="80" Value="10" VerticalAlignment="Center" ValueChanged="redraw_evt"/>
+                <Button Content="Fit" Click="fit_view"/><Button Content="Undo" Click="undo"/><Button Content="Redo" Click="redo"/>
+                <TextBlock Foreground="Gray" Text="  wheel = zoom, hold wheel = pan, Ctrl+Z / Ctrl+Y"/>
             </WrapPanel>
             <Border BorderBrush="Gainsboro" BorderThickness="1" ClipToBounds="True">
-                <Canvas x:Name="canvas" Background="White" ClipToBounds="True"/>
+                <Canvas x:Name="canvas" Background="White" ClipToBounds="True"
+                        MouseWheel="canvas_wheel" MouseDown="canvas_down" MouseMove="canvas_move" MouseUp="canvas_up"/>
             </Border>
         </DockPanel>
         <ScrollViewer Grid.Column="4" VerticalScrollBarVisibility="Auto">

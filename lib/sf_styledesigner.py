@@ -55,11 +55,12 @@ PARAMS = {
 
 
 def arrowheads(doc):
+    """{label: id} for every arrowhead; unnamed ones as '(no name) #id'."""
     out = {"(none)": ElementId.InvalidElementId}
     for t in FilteredElementCollector(doc).OfClass(ElementType):
         try:
             if t.FamilyName == "Arrowhead":
-                out[br.ename(t)] = t.Id
+                out[br.ename(t) or "(no name) #%s" % t.Id] = t.Id
         except Exception:
             pass
     return out
@@ -206,10 +207,20 @@ class StyleDesigner(forms.WPFWindow):
     def type_changed(self, sender, args):
         self.load_values()
 
+    def _refresh_heads(self):
+        """Re-read the arrowheads so ticks made since the window opened show up."""
+        self.heads = arrowheads(self.doc)
+        for combo in (self.tick, self.leader):
+            combo.Items.Clear()
+            for name in sorted(self.heads):
+                combo.Items.Add(name)
+
     def load_values(self):
         el = self.current()
         if el is None:
             return
+        self._tick_touched = False
+        self._refresh_heads()
         if self.is_tick:
             tv = ss.read_tick(el)
             self._loading = True
@@ -267,8 +278,8 @@ class StyleDesigner(forms.WPFWindow):
             if self.tick_pen.SelectedItem:
                 v["tick_pen"] = int(self.tick_pen.SelectedItem)
             v["prefix"], v["suffix"] = self.prefix.Text, self.suffix.Text
-            if self.tick.SelectedItem:
-                v["tick"] = self.heads[str(self.tick.SelectedItem)]
+            if self.tick.SelectedItem and getattr(self, "_tick_touched", False):
+                v["tick"] = self.heads.get(str(self.tick.SelectedItem), ElementId.InvalidElementId)
         else:
             v["border"] = bool(self.border.IsChecked)
             v["border_offset"] = _num(self.border_offset.Text, 1.0)
@@ -282,6 +293,8 @@ class StyleDesigner(forms.WPFWindow):
         picked = getattr(args, "AddedItems", None)
         if picked is not None and picked.Count and sender in (self.size, self.font):
             sender.Text = str(picked[0])
+        if sender is self.tick:
+            self._tick_touched = True
         self.redraw()
 
     def redraw_evt(self, sender, args):
@@ -496,11 +509,34 @@ class StyleDesigner(forms.WPFWindow):
             log.append("nothing saved: %s" % br._err(ex))
         return log
 
+    def _verify(self, el, wanted):
+        """Compare what was asked with what Revit kept on the type."""
+        got = read(self.doc, el, self.is_dim)
+        notes = []
+        for k, want in wanted.items():
+            have = got.get(k)
+            if have is None:
+                continue
+            if isinstance(want, float) or isinstance(have, float):
+                try:
+                    if abs(float(have) - float(want)) > 1e-3:
+                        notes.append("Revit kept %s = %g (asked %g)" % (k, float(have), float(want)))
+                except Exception:
+                    pass
+            elif str(have) != str(want):
+                notes.append("Revit kept %s = %s (asked %s)" % (k, have, want))
+        if self.is_dim and got.get("tick") == ElementId.InvalidElementId:
+            notes.append("WARNING: this dimension style has NO tick mark - pick one and Apply")
+        return notes
+
     def apply_click(self, sender, args):
         el = self.current()
         if el is None:
             return
+        wanted = None if self.is_tick else self.values()
         log = self._write(el)
+        if wanted is not None:
+            log += self._verify(el, wanted)
         self.status.Text = "\n".join(log) or "saved to %s" % (br.ename(el) or "the tick mark")
 
     def save_new_click(self, sender, args):

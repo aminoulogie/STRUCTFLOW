@@ -180,6 +180,9 @@ def apply(doc, cfg, extras, wanted, log):
                     _set(dt, "WITNS_LINE_TICK_MARK", None, arrow.Id)
             elif tick:
                 log("    no '%s' arrowhead in the model: tick left as it was on %s" % (tick, name))
+            p_tick = dt.LookupParameter("Tick Mark")
+            if p_tick is not None and p_tick.AsElementId() == ElementId.InvalidElementId:
+                log("    WARNING: %s has no tick mark" % name)
             if suffix:
                 _set(dt, "DIM_SUFFIX", "Suffix", suffix)
             if style in (DimensionStyleType.Linear, DimensionStyleType.SpotElevation):

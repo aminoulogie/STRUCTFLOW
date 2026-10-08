@@ -76,6 +76,11 @@ class Designer(forms.WPFWindow):
             self.f_pen.Items.Add(str(i))
         for d in ("up", "down", "left", "right"):
             self.f_dir.Items.Add(d)
+        for a in ("left", "center", "right"):
+            self.f_ha.Items.Add(a)
+        for a in ("top", "middle", "bottom"):
+            self.f_va.Items.Add(a)
+        self._rects = {}
         for h in HEIGHTS:
             self.f_h.Items.Add(h)
         self.out_root.Text = os.path.join(os.environ["USERPROFILE"], "Desktop", "EPL_FAMILIES")
@@ -373,7 +378,8 @@ class Designer(forms.WPFWindow):
         self._rotate(15)
 
     def add_text(self, sender, args):
-        self._add({"type": "text", "x": 0, "y": 0, "text": "TEXT", "h": 2.5, "pen": 1})
+        self._add({"type": "text", "x": 0, "y": 0, "text": "TEXT", "h": 2.5, "pen": 1,
+                   "ha": "left", "va": "middle", "wrap": sy.WRAP_MM})
 
     def duplicate(self, sender, args):
         if self.sel and self.sel[0] == "shape":
@@ -503,6 +509,12 @@ class Designer(forms.WPFWindow):
             if is_text:
                 self.f_h.Text = "%g" % item.get("h", 2.5)
                 self.f_font.Text = item.get("font", cfg["text"]["font"])
+            for c in (self.f_ha, self.f_va, self.f_wrap):
+                c.IsEnabled = is_text
+            if is_text:
+                self.f_ha.SelectedItem = item.get("ha", "center")
+                self.f_va.SelectedItem = item.get("va", "middle")
+                self.f_wrap.Text = "%g" % float(item.get("wrap", 0) or 0)
             is_label = self.sel[0] == "label"
             self.f_sample.IsEnabled = is_label
             self.f_sample.Text = item.get("sample", "") if is_label else ""
@@ -559,6 +571,15 @@ class Designer(forms.WPFWindow):
                 head = num(self.f_head.Text)
                 if head:
                     item["head"] = head
+        if self.f_ha.IsEnabled:
+            for combo, key in ((self.f_ha, "ha"), (self.f_va, "va")):
+                picked = getattr(args, "AddedItems", None)
+                val = str(picked[0]) if (sender is combo and picked is not None and picked.Count) else combo.SelectedItem
+                if val:
+                    item[key] = str(val)
+            wrap = num(self.f_wrap.Text)
+            if wrap is not None:
+                item["wrap"] = max(0.0, wrap)
         if self.f_h.IsEnabled:
             picked = getattr(args, "AddedItems", None)
             h = num(picked[0]) if (sender is self.f_h and picked is not None and picked.Count) else num(self.f_h.Text)
@@ -665,6 +686,7 @@ class Designer(forms.WPFWindow):
         self._ln(ox - 12, oy, ox + 12, oy, red, 1)
         self._ln(ox, oy - 12, ox, oy + 12, red, 1)
 
+        self._rects = {}
         self.draw_context()
         for i, s in enumerate(self.design["shapes"]):
             brush = BLUE if self.sel == ("shape", i) else Brushes.Black
@@ -673,9 +695,9 @@ class Designer(forms.WPFWindow):
             if lab.get("deleted"):
                 continue
             text = lab.get("sample") or (self.base_labels[i][0] if i < len(self.base_labels) else "LABEL %d" % (i + 1))
-            self.draw_text(lab["x"], lab["y"], text, lab["h"],
-                           BLUE if self.sel == ("label", i) else SolidColorBrush(Color.FromRgb(90, 90, 90)), True,
-                           lab.get("box_offset", 1.0) if lab.get("box") else None)
+            self._rects[("label", i)] = self.draw_text(
+                lab, text, BLUE if self.sel == ("label", i) else SolidColorBrush(Color.FromRgb(90, 90, 90)), True,
+                lab.get("box_offset", 1.0) if lab.get("box") else None)
 
     def draw_context(self):
         """What the symbol sits on in a drawing, in grey: grid / level /
@@ -782,36 +804,61 @@ class Designer(forms.WPFWindow):
                 pg.Fill = brush
             self.canvas.Children.Add(pg)
         else:
-            self.draw_text(s["x"], s["y"], s.get("text", ""), s.get("h", 2.5), brush, False)
+            self.draw_text(s, s.get("text", ""), brush, False)
 
-    def draw_text(self, x, y, text, h, brush, boxed, border=None):
+    def draw_text(self, spec, text, brush, boxed, border=None):
+        """Text laid out like Revit: (x, y) is the anchor; the alignment says
+        which side grows; text wider than the wrap width breaks onto new lines.
+        Returns the text box in mm (x0, y0, x1, y1) for clicking."""
+        from System.Windows import TextAlignment, TextWrapping
+        z = self._z()
+        h = float(spec.get("h", 2.5))
+        ha, va = spec.get("ha", "center"), spec.get("va", "middle")
+        wrap = float(spec.get("wrap", 0) or 0)
         tb = TextBlock()
         tb.Text = text
-        tb.FontFamily = FontFamily(cfg["text"]["font"])
-        tb.FontSize = max(6.0, h * self._z() / 0.72)  # Revit text height = capital height
+        tb.FontFamily = FontFamily(spec.get("font") or cfg["text"]["font"])
+        tb.FontSize = max(6.0, h * z / 0.72)  # Revit text height = capital height
         tb.Foreground = brush
-        tb.Measure(Size(1e4, 1e4))
-        tw, th = tb.DesiredSize.Width, tb.DesiredSize.Height
-        px, py = self.to_px(x, y)
-        Canvas.SetLeft(tb, px - tw / 2)
-        Canvas.SetTop(tb, py - th / 2)
+        tb.TextAlignment = {"left": TextAlignment.Left, "right": TextAlignment.Right}.get(ha, TextAlignment.Center)
+        if wrap > 0:
+            tb.TextWrapping = TextWrapping.Wrap
+            tb.Width = wrap * z
+        tb.Measure(Size(wrap * z if wrap > 0 else 1e5, 1e5))
+        tw = wrap * z if wrap > 0 else tb.DesiredSize.Width
+        th = tb.DesiredSize.Height
+        px, py = self.to_px(spec["x"], spec["y"])
+        x0 = {"left": px, "right": px - tw}.get(ha, px - tw / 2)
+        y0 = {"top": py, "bottom": py - th}.get(va, py - th / 2)
+        Canvas.SetLeft(tb, x0)
+        Canvas.SetTop(tb, y0)
         self.canvas.Children.Add(tb)
         if border is not None:
-            g = border * self._z()
+            g = border * z
             frame = Rectangle()
             frame.Width, frame.Height = tw + 2 * g, th + 2 * g
             frame.Stroke, frame.StrokeThickness = Brushes.Black, self._pen_px(1)
-            Canvas.SetLeft(frame, px - tw / 2 - g)
-            Canvas.SetTop(frame, py - th / 2 - g)
+            Canvas.SetLeft(frame, x0 - g)
+            Canvas.SetTop(frame, y0 - g)
             self.canvas.Children.Add(frame)
-        if boxed:
+        if boxed or wrap > 0:
             r = Rectangle()
-            r.Width, r.Height = tw + 4, th
+            r.Width, r.Height = tw, th
             r.Stroke, r.StrokeThickness = brush, 1
             r.StrokeDashArray = DoubleCollection([3.0, 2.0])
-            Canvas.SetLeft(r, px - tw / 2 - 2)
-            Canvas.SetTop(r, py - th / 2)
+            Canvas.SetLeft(r, x0)
+            Canvas.SetTop(r, y0)
             self.canvas.Children.Add(r)
+        # the anchor point
+        dot = Ellipse()
+        dot.Width = dot.Height = 5
+        dot.Fill = brush
+        Canvas.SetLeft(dot, px - 2.5)
+        Canvas.SetTop(dot, py - 2.5)
+        self.canvas.Children.Add(dot)
+        mx0, my1 = self.to_mm(x0, y0)
+        mx1, my0 = self.to_mm(x0 + tw, y0 + th)
+        return (mx0, my0, mx1, my1)
 
     def zoom_changed(self, sender, args):
         self.redraw()
@@ -820,8 +867,8 @@ class Designer(forms.WPFWindow):
     def _hit(self, mx, my):
         tol = 6.0 / self._z()
         for i in range(len(self.design["labels"]) - 1, -1, -1):
-            lab = self.design["labels"][i]
-            if abs(lab["x"] - mx) <= lab["h"] * 2 + tol and abs(lab["y"] - my) <= lab["h"] / 2 + tol:
+            box = self._rects.get(("label", i))
+            if box and box[0] - tol <= mx <= box[2] + tol and box[1] - tol <= my <= box[3] + tol:
                 return ("label", i)
         for i in range(len(self.design["shapes"]) - 1, -1, -1):
             x0, y0, x1, y1 = sy.bounds(self.design["shapes"][i])

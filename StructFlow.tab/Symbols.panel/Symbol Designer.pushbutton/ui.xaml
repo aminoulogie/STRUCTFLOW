@@ -89,6 +89,10 @@
                                    <TextBlock Foreground="Gray" Text="arrow head length (mm)"/></WrapPanel>
                         <WrapPanel><TextBlock Text="Text" Width="55"/><TextBox x:Name="f_text" Width="200" TextChanged="prop_changed"/></WrapPanel>
                         <WrapPanel><TextBlock Text="Sample" Width="55"/><TextBox x:Name="f_sample" Width="200" TextChanged="prop_changed"/></WrapPanel>
+                        <WrapPanel><TextBlock Text="Align" Width="55"/><ComboBox x:Name="f_ha" Width="70" SelectionChanged="prop_changed"/>
+                                   <ComboBox x:Name="f_va" Width="70" SelectionChanged="prop_changed"/>
+                                   <TextBlock Text="Wrap at"/><TextBox x:Name="f_wrap" Width="45" TextChanged="prop_changed"/><TextBlock Text="mm"/></WrapPanel>
+                        <TextBlock Foreground="Gray" TextWrapping="Wrap" Text="The point (X, Y) is where the text is anchored: right-aligned text grows to the left, top-aligned text grows down. Text longer than the wrap width goes onto a new line (0 = no wrap)."/>
                         <CheckBox x:Name="f_box" Content="Box around the label (grows with the text)" Click="prop_changed"/>
                         <WrapPanel><TextBlock Text="Box gap" Width="55"/><TextBox x:Name="f_gap" Width="60" TextChanged="prop_changed"/>
                                    <TextBlock Foreground="Gray" Text="mm between text and box"/></WrapPanel>

@@ -71,8 +71,39 @@ def _r(x, y, w, h, pen=1, fill=False):
     return {"type": "rect", "x": x, "y": y, "w": w, "h": h, "pen": pen, "fill": fill}
 
 
-def _lab(x, y, h, font="Arial"):
-    return {"x": x, "y": y, "h": h, "font": font}
+WRAP_MM = 20.0  # default text box width: longer text wraps onto a new line
+
+
+def _lab(x, y, h, font="Arial", ha="center", va="middle", wrap=WRAP_MM):
+    return {"x": x, "y": y, "h": h, "font": font, "ha": ha, "va": va, "wrap": wrap}
+
+
+def _align_enums(spec):
+    from Autodesk.Revit.DB import HorizontalTextAlignment, VerticalTextAlignment
+    ha = {"left": HorizontalTextAlignment.Left, "right": HorizontalTextAlignment.Right}.get(
+        spec.get("ha", "center"), HorizontalTextAlignment.Center)
+    va = {"top": VerticalTextAlignment.Top, "bottom": VerticalTextAlignment.Bottom}.get(
+        spec.get("va", "middle"), VerticalTextAlignment.Middle)
+    return ha, va
+
+
+def _apply_text_layout(te, spec, log, what):
+    """Alignment, wrap width and position on a label / text note."""
+    ha, va = _align_enums(spec)
+    try:
+        te.HorizontalAlignment = ha
+        te.VerticalAlignment = va
+    except Exception as ex:
+        log("%s: alignment not set: %s" % (what, br._err(ex)))
+    wrap = float(spec.get("wrap", 0) or 0)
+    if wrap > 0:
+        try:
+            w = wrap * MM
+            w = max(te.GetMinimumAllowedWidth(), min(te.GetMaximumAllowedWidth(), w))
+            te.Width = w
+        except Exception as ex:
+            log("%s: wrap width not set: %s" % (what, br._err(ex)))
+    te.Coord = _P(spec["x"], spec["y"])
 
 
 def preset(kind, cfg=None):
@@ -434,7 +465,12 @@ def build(doc, design, mode, root, save_file, load, log):
                         log("no text type in the family, text '%s' skipped" % s.get("text"))
                         continue
                     tt = _text_type(fdoc, note_base[0], design.get("font", "Arial"), float(s.get("h", 2.5)), texts)
-                    TextNote.Create(fdoc, view.Id, _P(s["x"], s["y"]), s.get("text", ""), tt.Id)
+                    wrap = float(s.get("wrap", 0) or 0)
+                    if wrap > 0:
+                        tn = TextNote.Create(fdoc, view.Id, _P(s["x"], s["y"]), wrap * MM, s.get("text", ""), tt.Id)
+                    else:
+                        tn = TextNote.Create(fdoc, view.Id, _P(s["x"], s["y"]), s.get("text", ""), tt.Id)
+                    _apply_text_layout(tn, s, log, "text '%s'" % s.get("text", ""))
                     continue
                 style = _pen_style(fdoc, int(s.get("pen", 1)), pens)
                 for piece in pieces(s):
@@ -469,7 +505,7 @@ def build(doc, design, mode, root, save_file, load, log):
                                 float(spec.get("h", 2.5)), texts, bool(spec.get("box")),
                                 float(spec.get("box_offset", 1.0)))
                 lab.ChangeTypeId(lt.Id)
-                lab.Coord = _P(spec["x"], spec["y"])
+                _apply_text_layout(lab, spec, log, "label %d" % (i + 1))
                 if spec.get("sample"):
                     try:
                         fmts = list(lab.GetParameterFormatting())
@@ -578,6 +614,18 @@ def _curve_shape(c, pen):
     return {"type": "polygon", "pts": pts, "closed": False, "pen": pen, "fill": False}
 
 
+def _layout_of(te):
+    """ha / va / wrap (mm) of a label or text note."""
+    out = {"ha": "center", "va": "middle", "wrap": 0.0}
+    try:
+        out["ha"] = str(te.HorizontalAlignment).lower()
+        out["va"] = str(te.VerticalAlignment).lower()
+        out["wrap"] = _mm(te.Width)
+    except Exception:
+        pass
+    return out
+
+
 def import_family(doc, family, kind):
     """The family as a design: its real lines, arcs, circles, fills, texts and
     labels (with their fonts, heights, borders and sample text)."""
@@ -600,8 +648,10 @@ def import_family(doc, family, kind):
                 if len(pts) >= 3:
                     shapes.append({"type": "polygon", "pts": pts, "closed": True, "pen": 1, "fill": True})
         for tn in FilteredElementCollector(fdoc).OfClass(TextNote):
-            shapes.append({"type": "text", "x": _mm(tn.Coord.X), "y": _mm(tn.Coord.Y), "text": tn.Text.strip(),
-                           "h": _text_height(fdoc, tn), "pen": 1})
+            shape = {"type": "text", "x": _mm(tn.Coord.X), "y": _mm(tn.Coord.Y), "text": tn.Text.strip(),
+                     "h": _text_height(fdoc, tn), "pen": 1}
+            shape.update(_layout_of(tn))
+            shapes.append(shape)
         labels = []
         for lab in _labels(fdoc):
             lt = fdoc.GetElement(lab.GetTypeId())
@@ -620,9 +670,11 @@ def import_family(doc, family, kind):
                 sample = " ".join((f.SampleText or "") for f in fmts).strip()
             except Exception:
                 pass
-            labels.append({"x": _mm(lab.Coord.X), "y": _mm(lab.Coord.Y), "h": _text_height(fdoc, lab),
-                           "font": font, "box": box, "box_offset": gap,
-                           "sample": sample or (lab.Text or "1"), "shows": _label_contents(fdoc, lab)})
+            spec = {"x": _mm(lab.Coord.X), "y": _mm(lab.Coord.Y), "h": _text_height(fdoc, lab),
+                    "font": font, "box": box, "box_offset": gap,
+                    "sample": sample or (lab.Text or "1"), "shows": _label_contents(fdoc, lab)}
+            spec.update(_layout_of(lab))
+            labels.append(spec)
     finally:
         fdoc.Close(False)
     folder = KIND[kind][3] if kind in KIND else "01_ANNOTATION\\03_SYMBOLS"
@@ -642,10 +694,12 @@ def verify(doc, design, family_name, kind):
     if have_geo < want_geo:
         notes.append("geometry: %d shapes asked, %d found" % (want_geo, have_geo))
     for i, (w, h) in enumerate(zip(design.get("labels", []), got["labels"])):
-        for key in ("h", "font", "box"):
+        for key in ("h", "font", "box", "ha", "va"):
             if key in w and str(w[key]) != str(h.get(key)) and not (
                     key == "h" and abs(float(w[key]) - float(h[key])) < 0.01):
                 notes.append("label %d: Revit kept %s = %s (asked %s)" % (i + 1, key, h.get(key), w[key]))
+        if float(w.get("wrap", 0) or 0) > 0 and abs(float(w["wrap"]) - float(h.get("wrap", 0))) > 0.1:
+            notes.append("label %d: Revit kept wrap width %g mm (asked %g)" % (i + 1, h.get("wrap", 0), w["wrap"]))
         if abs(float(w["x"]) - float(h["x"])) > 0.05 or abs(float(w["y"]) - float(h["y"])) > 0.05:
             notes.append("label %d: position (%g, %g) asked, (%g, %g) kept" % (i + 1, w["x"], w["y"], h["x"], h["y"]))
     return notes or ["checked: every shape and label setting was kept"]

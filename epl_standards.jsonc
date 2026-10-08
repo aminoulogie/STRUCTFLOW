@@ -1,0 +1,96 @@
+// =============================================================================
+//  EPL TEMPLATE STANDARDS  -  StructFlow reads everything from this one file.
+//  Edit values here, never in the code.  Lines starting with // are comments.
+//  Lengths: mm on paper unless the name says otherwise.  Colours: [R, G, B].
+// =============================================================================
+{
+  // ---------------------------------------------------------------- general
+  "general": {
+    // CSV reports and change logs go here (one file per run, dated)
+    "reports_folder": "%USERPROFILE%\\Desktop\\StructFlow_reports",
+    // copy the saved .rvt / .rte into a _backup folder next to it before any deletion
+    "backup_before_delete": true,
+    "backup_folder_name": "_backup"
+  },
+
+  // ------------------------------------------------- step 2: line weights
+  // Model line weights (pens 1-16) per view scale.  ISO 128 pen series,
+  // the usual UK structural set: thin outlines 0.13-0.18, cut concrete 0.5-0.7.
+  "line_weights": {
+    "model": {
+      "1:20":  [0.18, 0.25, 0.35, 0.50, 0.70, 1.00, 1.40, 2.00, 2.50, 3.00, 3.50, 4.00, 5.00, 6.00, 7.00, 8.00],
+      "1:50":  [0.13, 0.18, 0.25, 0.35, 0.50, 0.70, 1.00, 1.40, 2.00, 2.50, 3.00, 3.50, 4.00, 5.00, 6.00, 7.00],
+      "1:100": [0.10, 0.13, 0.18, 0.25, 0.35, 0.50, 0.70, 1.00, 1.40, 2.00, 2.50, 3.00, 3.50, 4.00, 5.00, 6.00]
+    },
+    // annotation lines (text, dimensions, tags, symbols) do not scale
+    "annotation": [0.13, 0.18, 0.25, 0.35, 0.50, 0.70, 1.00, 1.40, 2.00, 2.50, 3.00, 3.50, 4.00, 5.00, 6.00, 7.00],
+    // perspective views
+    "perspective": [0.13, 0.18, 0.25, 0.35, 0.50, 0.70, 1.00, 1.40, 2.00, 2.50, 3.00, 3.50, 4.00, 5.00, 6.00, 7.00]
+  },
+
+  // --------------------------------------------------- step 2: line styles
+  // EPL line styles (Manage > Additional Settings > Line Styles).
+  // pen = line weight number above, pattern = an existing line pattern name.
+  "line_styles": [
+    {"name": "EPL_Thin",          "pen": 1, "colour": [0, 0, 0],       "pattern": "Solid"},
+    {"name": "EPL_Medium",        "pen": 3, "colour": [0, 0, 0],       "pattern": "Solid"},
+    {"name": "EPL_Wide",          "pen": 5, "colour": [0, 0, 0],       "pattern": "Solid"},
+    {"name": "EPL_ExtraWide",     "pen": 7, "colour": [0, 0, 0],       "pattern": "Solid"},
+    {"name": "EPL_Hidden",        "pen": 2, "colour": [0, 0, 0],       "pattern": "Hidden"},
+    {"name": "EPL_Centreline",    "pen": 1, "colour": [0, 0, 0],       "pattern": "Center"},
+    {"name": "EPL_GridLine",      "pen": 1, "colour": [0, 0, 0],       "pattern": "Grid Line"},
+    {"name": "EPL_Existing",      "pen": 2, "colour": [128, 128, 128], "pattern": "Solid"},
+    {"name": "EPL_Demolished",    "pen": 2, "colour": [128, 128, 128], "pattern": "Dash"},
+    {"name": "EPL_SettingOut",    "pen": 1, "colour": [220, 30, 30],   "pattern": "Dash Dot"},
+    {"name": "EPL_RevisionCloud", "pen": 3, "colour": [0, 0, 0],       "pattern": "Solid"}
+  ],
+
+  // ------------------------------------------------ text and dimensions
+  "text": {
+    "font": "Arial",
+    // one text type per height: EPL_Text_2.5mm etc.
+    "heights": [1.8, 2.5, 3.5, 5.0, 7.0],
+    "width_factor": 1.0,
+    "colour": [0, 0, 0],
+    "background": "Transparent",
+    "leader_arrow": "Arrow Filled 15 Degree"
+  },
+  "dimensions": [
+    // name, text height, tick mark, line pen; UK structural: diagonal ticks, Arial
+    {"name": "EPL_Dim_2.5mm", "text_height": 2.5, "tick": "Diagonal 3mm", "pen": 1, "colour": [0, 0, 0]},
+    {"name": "EPL_Dim_1.8mm", "text_height": 1.8, "tick": "Diagonal 2mm", "pen": 1, "colour": [0, 0, 0]}
+  ],
+
+  // -------------------------------------------- step 4: section standard
+  "sections": {
+    "head_family": "EPL_ANN_SectionHead_Filled",
+    "tail_family": "EPL_ANN_SectionTail_Filled",
+    "line_pen": 3,
+    "line_pattern": "Dash Dot",
+    "view_template": "EPL_STR_Section_1-20",
+    "scale": 20,
+    "detail_level": "Fine",
+    // concrete hatch / cut fill shown in cut
+    "show_cut_patterns": true,
+    "discipline": "Structural"
+  },
+
+  // ------------------------------------- step 5: sheet and view symbols
+  "symbols": {
+    "view_title": "EPL_ANN_ViewTitle",
+    "grid_head": "EPL_ANN_GridHead_Circle-9mm",
+    "level_head": "EPL_ANN_LevelHead_Circle-8mm",
+    "callout_head": "EPL_ANN_CalloutHead",
+    "section_head": "EPL_ANN_SectionHead_Filled",
+    "elevation_body": "EPL_ANN_ElevationBody_Circle-10mm",
+    "elevation_pointer": "EPL_ANN_ElevationPointer_Circle-10mm"
+  },
+
+  // ------------------------------------------ step 7: family folders
+  // the EPL library tree in lib/epl_library.json decides the folder of each
+  // known family; unknown or uncertain ones go here (never deleted)
+  "folders": {
+    "use_epl_library_tree": true,
+    "archive_folder": "99_ARCHIVE"
+  }
+}

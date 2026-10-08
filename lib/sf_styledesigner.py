@@ -210,6 +210,15 @@ class StyleDesigner(forms.WPFWindow):
         i = self.types.SelectedIndex
         return self.type_list[i] if 0 <= i < len(self.type_list) else None
 
+    def chosen(self):
+        """Every type picked in the list (Ctrl / Shift click)."""
+        out = []
+        for item in self.types.SelectedItems:
+            i = self.types.Items.IndexOf(item)
+            if 0 <= i < len(self.type_list) and self.type_list[i] not in out:
+                out.append(self.type_list[i])
+        return out or ([self.current()] if self.current() is not None else [])
+
     def type_changed(self, sender, args):
         self.load_values()
 
@@ -667,14 +676,21 @@ class StyleDesigner(forms.WPFWindow):
         return notes
 
     def apply_click(self, sender, args):
-        el = self.current()
-        if el is None:
+        targets = self.chosen()
+        if not targets:
+            return
+        if len(targets) > 1 and not forms.alert(
+                "Apply these settings to the %d selected types?" % len(targets), yes=True, no=True):
             return
         wanted = None if self.is_tick else self.values()
-        log = self._write(el)
-        if wanted is not None:
-            log += self._verify(el, wanted)
-        self.status.Text = "\n".join(log) or "saved to %s" % (br.ename(el) or "the tick mark")
+        log = []
+        for el in targets:
+            notes = self._write(el)
+            if wanted is not None:
+                notes += self._verify(el, wanted)
+            name = br.ename(el) or "(no name) #%s" % el.Id
+            log += ["%s: %s" % (name, n) for n in notes] if notes else ["%s: saved, every value kept" % name]
+        self.status.Text = "\n".join(log)
 
     def save_new_click(self, sender, args):
         el = self.current()

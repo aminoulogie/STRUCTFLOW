@@ -936,21 +936,41 @@ class Designer(forms.WPFWindow):
         if not self.design["base"]:
             forms.alert("Pick a base family (it provides the labels).")
             return
-        choice = forms.CommandSwitchWindow.show(
-            ["Save as EPL copy '%s' (keep the original)" % self.design["name"],
-             "Overwrite '%s' in this model" % self.design["base"]],
-            message="What should happen to the original family?")
+        if not self.load_model.IsChecked:
+            if not forms.alert("'Load it into this model' is off, so nothing will change in the model "
+                               "(only the .rfa file is saved). Continue?", yes=True, no=True):
+                return
+        base, name = self.design["base"], self.design["name"]
+        old_fam = self.base_family()
+        uses = sy.usage_count(doc, old_fam) if old_fam is not None else 0
+        UPDATE = "Update '%s' itself - everything using it changes now (%d uses)" % (base, uses)
+        SWITCH = "Save as EPL copy '%s' and switch everything to it" % name
+        COPY = "Save as EPL copy '%s' only (the original stays in use)" % name
+        options = [UPDATE] if (not name or name == base) else [UPDATE, SWITCH, COPY]
+        choice = forms.CommandSwitchWindow.show(options, message="Apply the changes how?")
         if not choice:
             return
-        mode = "copy" if choice.startswith("Save as") else "overwrite"
+        mode = "overwrite" if choice == UPDATE else "copy"
         log = []
         try:
             sy.build(doc, self.design, mode, self.out_root.Text.strip(),
                      bool(self.save_file.IsChecked), bool(self.load_model.IsChecked), log.append)
+            built = name if mode == "copy" else base
+            summary = ""
             if self.load_model.IsChecked:
-                built = self.design["name"] if mode == "copy" else self.design["base"]
+                if choice == SWITCH:
+                    new_fam = sy.families_of_kind(doc, self.kind_key()).get(name)
+                    if new_fam is not None and old_fam is not None:
+                        n = sy.replace_family_usage(doc, old_fam, new_fam, log.append)
+                        summary = "'%s' built and %d use(s) switched from '%s' to it." % (name, n, base)
+                elif choice == UPDATE:
+                    summary = "'%s' updated in the model - its %d use(s) show the change." % (base, uses)
+                else:
+                    summary = ("'%s' built as a NEW family; '%s' is unchanged and still in use. "
+                               "Use Symbol Assign (or 'switch everything') to use the new one." % (name, base))
                 log += sy.verify(doc, self.design, built, self.kind_key())
-            self.status.Text = "\n".join(log) or "done"
+            self.status.Text = "\n".join(([summary] if summary else []) + log) or "done"
+            self.design["name"] = built
             keep = self.design["name"]
             self.kind_changed(None, None)
             if keep in self.fam_names:

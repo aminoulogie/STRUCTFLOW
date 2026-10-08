@@ -837,3 +837,87 @@ def write_datum(doc, t, kind, values):
     got = read_datum(doc, t, kind)
     return ["Revit kept %s = %s (asked %s)" % (n, got.get(n), v) for n, v in values.items()
             if n in got and str(got.get(n)) != str(v)]
+
+
+# --------------------------------------------- switch users to another family
+def _id_key(eid):
+    return eid.Value if hasattr(eid, "Value") else eid.IntegerValue
+
+
+def replace_family_usage(doc, old_family, new_family, log):
+    """Point everything that used old_family's types at new_family's types
+    (same type name when it exists, else the first one): type parameters
+    such as a grid type's Symbol or a viewport type's Title, placed
+    annotations / tags, and category default types. Returns the count."""
+    from Autodesk.Revit.DB import ElementType, StorageType
+    old_ids = dict((_id_key(i), i) for i in old_family.GetFamilySymbolIds())
+    new_syms = [doc.GetElement(i) for i in new_family.GetFamilySymbolIds()]
+    if not old_ids or not new_syms:
+        return 0
+    by_name = dict((br.ename(s), s) for s in new_syms)
+
+    def target(old_id):
+        old = doc.GetElement(old_id)
+        return by_name.get(br.ename(old), new_syms[0]).Id
+
+    n = 0
+    t = Transaction(doc, "StructFlow switch to %s" % new_family.Name)
+    t.Start()
+    try:
+        for et in FilteredElementCollector(doc).OfClass(ElementType):
+            for p in et.Parameters:
+                try:
+                    if p.StorageType == StorageType.ElementId and not p.IsReadOnly and _id_key(p.AsElementId()) in old_ids:
+                        p.Set(target(p.AsElementId()))
+                        n += 1
+                        log("  %s '%s': %s -> %s" % (p.Definition.Name, br.ename(et), old_family.Name, new_family.Name))
+                except Exception:
+                    pass
+        moved = 0
+        for el in FilteredElementCollector(doc).WhereElementIsNotElementType():
+            try:
+                tid = el.GetTypeId()
+                if tid is not None and _id_key(tid) in old_ids:
+                    el.ChangeTypeId(target(tid))
+                    moved += 1
+            except Exception:
+                pass
+        if moved:
+            log("  %d placed symbol(s) / tag(s) switched" % moved)
+        n += moved
+        cat = old_family.FamilyCategory
+        if cat is not None:
+            try:
+                cur = doc.GetDefaultFamilyTypeId(cat.Id)
+                if cur is not None and _id_key(cur) in old_ids:
+                    doc.SetDefaultFamilyTypeId(cat.Id, target(cur))
+                    log("  default %s type switched" % cat.Name)
+                    n += 1
+            except Exception:
+                pass
+        t.Commit()
+    except Exception:
+        t.RollBack()
+        raise
+    return n
+
+
+def usage_count(doc, family):
+    """How many types / placed elements point at this family (what will show the change)."""
+    from Autodesk.Revit.DB import ElementType, StorageType
+    ids = set(_id_key(i) for i in family.GetFamilySymbolIds())
+    n = 0
+    for et in FilteredElementCollector(doc).OfClass(ElementType):
+        for p in et.Parameters:
+            try:
+                if p.StorageType == StorageType.ElementId and _id_key(p.AsElementId()) in ids:
+                    n += 1
+            except Exception:
+                pass
+    for el in FilteredElementCollector(doc).WhereElementIsNotElementType():
+        try:
+            if _id_key(el.GetTypeId()) in ids:
+                n += 1
+        except Exception:
+            pass
+    return n

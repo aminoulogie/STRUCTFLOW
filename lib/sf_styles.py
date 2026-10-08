@@ -76,9 +76,10 @@ def dim_specs(cfg, wanted):
     tick = cfg["dimensions"][0].get("tick", "Diagonal 3mm") if cfg.get("dimensions") else "Diagonal 3mm"
     small_tick = cfg["dimensions"][1].get("tick", "Diagonal 2mm") if len(cfg.get("dimensions", [])) > 1 else tick
     if "linear" in wanted:
+        # no '_Centre' types: Revit's linear dimension style has no text position
+        # setting, the text always sits above the line
         for h, tk in ((2.5, tick), (1.8, small_tick)):
             out.append(("EPL_Dim_%gmm" % h, DimensionStyleType.Linear, h, tk, False, "", False))
-            out.append(("EPL_Dim_%gmm_Centre" % h, DimensionStyleType.Linear, h, tk, True, "", False))
     if "angular" in wanted:
         out.append(("EPL_Dim_Angular_2.5mm", DimensionStyleType.Angular, 2.5, "Arrow Filled 15 Degree", False, "", False))
         out.append(("EPL_Dim_Radial_2.5mm", DimensionStyleType.Radial, 2.5, "Arrow Filled 15 Degree", False, "", False))

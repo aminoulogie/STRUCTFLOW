@@ -65,6 +65,8 @@ class Designer(forms.WPFWindow):
         self.fam_names = []
         self.pan = [0.0, 0.0]
         self.panning = None
+        self.picked = []   # every selected item: ("shape", i) / ("label", i)
+        self.band = None   # selection box start (px)
         self.history, self.future = [], []
         self._last_snap = 0.0
         self.datum = {}
@@ -134,6 +136,7 @@ class Designer(forms.WPFWindow):
     def set_design(self, d):
         self.design = d
         self.sel = None
+        self.picked = []
         self.out_name.Text = d.get("name", "")
         self.out_folder.Text = d.get("folder", "")
         self.refresh_lists()
@@ -163,7 +166,7 @@ class Designer(forms.WPFWindow):
 
     def _restore(self, state):
         self.design = json.loads(state)
-        self.sel = None
+        self.sel, self.picked = None, []
         self.refresh_lists()
         self.redraw()
 
@@ -362,14 +365,27 @@ class Designer(forms.WPFWindow):
     def add_polygon(self, sender, args):
         self._add({"type": "polygon", "pts": [[-3, -2], [3, -2], [4, 2], [-2, 3]], "pen": 1, "fill": False})
 
+    def selection(self):
+        """Every selected item (the box / Ctrl+click selection, or the single one)."""
+        items = list(self.picked)
+        if self.sel and self.sel not in items:
+            items.append(self.sel)
+        n_s, n_l = len(self.design["shapes"]), len(self.design["labels"])
+        return [k for k in items if (k[0] == "shape" and k[1] < n_s) or (k[0] == "label" and k[1] < n_l)]
+
+    def _item(self, key):
+        return (self.design["shapes"] if key[0] == "shape" else self.design["labels"])[key[1]]
+
     def _rotate(self, deg):
-        item = self.current()
-        if item is not None and self.sel[0] == "shape":
-            self.snapshot(force=True)
+        shapes = [k for k in self.selection() if k[0] == "shape"]
+        if not shapes:
+            return
+        self.snapshot(force=True)
+        for k in shapes:
+            item = self._item(k)
             item["rot"] = (float(item.get("rot", 0) or 0) + deg) % 360
-            self.fill_props()
-            self._update_list_text()
-            self.redraw()
+        self.refresh_lists()
+        self.redraw()
 
     def rot_left(self, sender, args):
         self._rotate(-15)
@@ -382,27 +398,36 @@ class Designer(forms.WPFWindow):
                    "ha": "left", "va": "middle", "wrap": sy.WRAP_MM})
 
     def duplicate(self, sender, args):
-        if self.sel and self.sel[0] == "shape":
-            s = dict(self.design["shapes"][self.sel[1]])
-            sy.move(s, 2, -2)
-            self._add(s)
+        shapes = [k for k in self.selection() if k[0] == "shape"]
+        if not shapes:
+            return
+        self.snapshot(force=True)
+        new = []
+        for k in shapes:
+            c = json.loads(json.dumps(self._item(k)))
+            sy.move(c, 2, -2)
+            self.design["shapes"].append(c)
+            new.append(("shape", len(self.design["shapes"]) - 1))
+        self.picked, self.sel = new, new[-1]
+        self.refresh_lists()
+        self.redraw()
 
     def delete(self, sender, args):
-        if self.sel and self.sel[0] == "label":
-            self.snapshot(force=True)
-            lab = self.design["labels"][self.sel[1]]
-            lab["deleted"] = not lab.get("deleted")
-            self.status.Text = ("label marked for deletion (Revit can delete labels but cannot make new ones)"
-                                if lab["deleted"] else "label kept")
-            self.refresh_lists()
-            self.redraw()
+        items = self.selection()
+        if not items:
             return
-        if self.sel and self.sel[0] == "shape":
-            self.snapshot(force=True)
-            del self.design["shapes"][self.sel[1]]
-            self.sel = None
-            self.refresh_lists()
-            self.redraw()
+        self.snapshot(force=True)
+        labels = [k for k in items if k[0] == "label"]
+        for k in labels:
+            lab = self._item(k)
+            lab["deleted"] = not lab.get("deleted")
+        if labels:
+            self.status.Text = "label(s) marked / unmarked for deletion (Revit can delete labels, not make new ones)"
+        for i in sorted([k[1] for k in items if k[0] == "shape"], reverse=True):
+            del self.design["shapes"][i]
+        self.sel, self.picked = None, []
+        self.refresh_lists()
+        self.redraw()
 
     # ------------------------------------------------------- side lists
     def describe(self, s):
@@ -448,6 +473,7 @@ class Designer(forms.WPFWindow):
     def shape_picked(self, sender, args):
         if not self._loading and self.shapes.SelectedIndex >= 0:
             self.sel = ("shape", self.shapes.SelectedIndex)
+            self.picked = [self.sel]
             self.labels.SelectedIndex = -1
             self.fill_props()
             self.redraw()
@@ -455,6 +481,7 @@ class Designer(forms.WPFWindow):
     def label_picked(self, sender, args):
         if not self._loading and self.labels.SelectedIndex >= 0:
             self.sel = ("label", self.labels.SelectedIndex)
+            self.picked = [self.sel]
             self.shapes.SelectedIndex = -1
             self.fill_props()
             self.redraw()
@@ -688,15 +715,16 @@ class Designer(forms.WPFWindow):
 
         self._rects = {}
         self.draw_context()
+        chosen = set(self.selection())
         for i, s in enumerate(self.design["shapes"]):
-            brush = BLUE if self.sel == ("shape", i) else Brushes.Black
+            brush = BLUE if ("shape", i) in chosen else Brushes.Black
             self.draw_shape(s, brush)
         for i, lab in enumerate(self.design["labels"]):
             if lab.get("deleted"):
                 continue
             text = lab.get("sample") or (self.base_labels[i][0] if i < len(self.base_labels) else "LABEL %d" % (i + 1))
             self._rects[("label", i)] = self.draw_text(
-                lab, text, BLUE if self.sel == ("label", i) else SolidColorBrush(Color.FromRgb(90, 90, 90)), True,
+                lab, text, BLUE if ("label", i) in chosen else SolidColorBrush(Color.FromRgb(90, 90, 90)), True,
                 lab.get("box_offset", 1.0) if lab.get("box") else None)
 
     def draw_context(self):
@@ -879,14 +907,69 @@ class Designer(forms.WPFWindow):
     def canvas_down(self, sender, args):
         p = args.GetPosition(self.canvas)
         mx, my = self.to_mm(p.X, p.Y)
-        self.sel = self._hit(mx, my)
-        self.drag = (mx, my) if self.sel else None
-        if self.sel:
+        hit = self._hit(mx, my)
+        ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control
+        shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift
+        current = self.selection()
+        if hit is None:
+            # empty space: start a selection box
+            if not (ctrl or shift):
+                self.picked, self.sel = [], None
+            self.band = (p.X, p.Y)
+            self.drag = None
+            self.canvas.CaptureMouse()
+            self.refresh_lists()
+            self.redraw()
+            return
+        if ctrl:
+            # Ctrl+click adds / removes
+            self.picked = [k for k in current if k != hit] if hit in current else current + [hit]
+            self.sel = self.picked[-1] if self.picked else None
+            self.drag = None
+        else:
+            if hit not in current:
+                self.picked = current + [hit] if shift else [hit]
+            else:
+                self.picked = current
+            self.sel = hit
+            self.drag = (mx, my)
             self.snapshot(force=True)
-        if self.sel:
             self.canvas.CaptureMouse()
         self.refresh_lists()
         self.redraw()
+
+    def _draw_band(self, p):
+        x0, y0 = self.band
+        r = Rectangle()
+        r.Width, r.Height = abs(p.X - x0), abs(p.Y - y0)
+        crossing = p.X < x0  # right-to-left: anything touched, like Revit
+        r.Stroke = BLUE
+        r.StrokeThickness = 1
+        if crossing:
+            r.StrokeDashArray = DoubleCollection([4.0, 3.0])
+        r.Fill = SolidColorBrush(Color.FromArgb(30, 30, 110, 230))
+        Canvas.SetLeft(r, min(x0, p.X))
+        Canvas.SetTop(r, min(y0, p.Y))
+        self.canvas.Children.Add(r)
+
+    def _finish_band(self, p):
+        x0, y0 = self.band
+        crossing = p.X < x0
+        ax, ay = self.to_mm(min(x0, p.X), max(y0, p.Y))
+        bx, by = self.to_mm(max(x0, p.X), min(y0, p.Y))
+        found = []
+        boxes = [(("shape", i), sy.bounds(sh)) for i, sh in enumerate(self.design["shapes"])]
+        boxes += [(k, b) for k, b in self._rects.items()]
+        for key, (x1, y1, x2, y2) in boxes:
+            if key[0] == "label" and self.design["labels"][key[1]].get("deleted"):
+                continue
+            inside = ax <= x1 and x2 <= bx and ay <= y1 and y2 <= by
+            touches = not (x2 < ax or x1 > bx or y2 < ay or y1 > by)
+            if inside or (crossing and touches):
+                found.append(key)
+        self.picked = list(self.picked) + [k for k in found if k not in self.picked]
+        self.sel = self.picked[-1] if self.picked else None
+        self.status.Text = "%d item(s) selected" % len(self.picked) if self.picked else ""
 
     def canvas_move(self, sender, args):
         p = args.GetPosition(self.canvas)
@@ -898,6 +981,10 @@ class Designer(forms.WPFWindow):
             return
         mx, my = self.to_mm(p.X, p.Y)
         self.cursor.Text = "x %.1f   y %.1f mm" % (mx, my)
+        if self.band:
+            self.redraw()
+            self._draw_band(p)
+            return
         if not self.drag or not self.sel:
             return
         dx, dy = mx - self.drag[0], my - self.drag[1]
@@ -906,17 +993,25 @@ class Designer(forms.WPFWindow):
             dx, dy = round(dx / step) * step, round(dy / step) * step
         if dx == 0 and dy == 0:
             return
-        item = self.current()
-        if self.sel[0] == "shape":
-            sy.move(item, dx, dy)
-        else:
-            item["x"] += dx
-            item["y"] += dy
+        for key in self.selection():
+            item = self._item(key)
+            if key[0] == "shape":
+                sy.move(item, dx, dy)
+            else:
+                item["x"] += dx
+                item["y"] += dy
         self.drag = (self.drag[0] + dx, self.drag[1] + dy)
         self.fill_props()
         self.redraw()
 
     def canvas_up(self, sender, args):
+        if self.band:
+            self._finish_band(args.GetPosition(self.canvas))
+            self.band = None
+            self.canvas.ReleaseMouseCapture()
+            self.refresh_lists()
+            self.redraw()
+            return
         if self.drag:
             self.canvas.ReleaseMouseCapture()
             self.drag = None

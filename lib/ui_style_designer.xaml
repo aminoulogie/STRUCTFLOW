@@ -16,7 +16,7 @@
         <DockPanel Grid.Column="0">
             <ComboBox x:Name="kind" DockPanel.Dock="Top" SelectionChanged="kind_changed"/>
             <Button DockPanel.Dock="Bottom" Content="Delete this type..." Click="delete_type_click"/>
-            <ListBox x:Name="types" SelectionChanged="type_changed"/>
+            <ListBox x:Name="types" SelectionMode="Extended" SelectionChanged="type_changed" ToolTip="Ctrl / Shift click to pick several: Apply then sets them all"/>
         </DockPanel>
         <DockPanel Grid.Column="2">
             <WrapPanel DockPanel.Dock="Bottom">

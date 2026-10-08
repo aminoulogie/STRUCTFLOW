@@ -43,7 +43,10 @@
                 <TextBlock Text="Add:"/>
                 <Button Content="Circle" Click="add_circle"/><Button Content="Line" Click="add_line"/>
                 <Button Content="Rectangle" Click="add_rect"/><Button Content="Triangle" Click="add_triangle"/>
+                <Button Content="Arrow" Click="add_arrow"/><Button Content="Dot" Click="add_dot"/>
+                <Button Content="Polygon" Click="add_polygon"/>
                 <Button Content="Text" Click="add_text"/>
+                <Button Content="Rotate -15" Click="rot_left"/><Button Content="Rotate +15" Click="rot_right"/>
                 <Button Content="Duplicate" Click="duplicate"/><Button Content="Delete" Click="delete"/>
             </WrapPanel>
             <WrapPanel DockPanel.Dock="Bottom">
@@ -75,7 +78,10 @@
                                    <TextBlock x:Name="l_b" Text="B" Width="55"/><TextBox x:Name="f_b" Width="60" TextChanged="prop_changed"/></WrapPanel>
                         <WrapPanel><TextBlock Text="Pen" Width="55"/><ComboBox x:Name="f_pen" Width="60" SelectionChanged="prop_changed"/>
                                    <CheckBox x:Name="f_fill" Content="Filled (solid black)" VerticalAlignment="Center" Click="prop_changed"/></WrapPanel>
-                        <WrapPanel><TextBlock Text="Direction" Width="55"/><ComboBox x:Name="f_dir" Width="90" SelectionChanged="prop_changed"/></WrapPanel>
+                        <WrapPanel><TextBlock Text="Direction" Width="55"/><ComboBox x:Name="f_dir" Width="90" SelectionChanged="prop_changed"/>
+                                   <TextBlock Text="Rotate" Width="45"/><TextBox x:Name="f_rot" Width="50" TextChanged="prop_changed"/><TextBlock Text="deg"/></WrapPanel>
+                        <WrapPanel><TextBlock Text="Head" Width="55"/><TextBox x:Name="f_head" Width="60" TextChanged="prop_changed"/>
+                                   <TextBlock Foreground="Gray" Text="arrow head length (mm)"/></WrapPanel>
                         <WrapPanel><TextBlock Text="Text" Width="55"/><TextBox x:Name="f_text" Width="200" TextChanged="prop_changed"/></WrapPanel>
                         <CheckBox x:Name="f_box" Content="Box around the label (grows with the text)" Click="prop_changed"/>
                         <WrapPanel><TextBlock Text="Box gap" Width="55"/><TextBox x:Name="f_gap" Width="60" TextChanged="prop_changed"/>

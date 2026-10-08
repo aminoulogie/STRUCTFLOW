@@ -34,6 +34,9 @@ FIELDS = {
     "rect": (("X corner", "Y corner", "Width", "Height"), True, False),
     "triangle": (("X centre", "Y centre", "Width", "Height"), True, True),
     "text": (("X", "Y", "", ""), False, False),
+    "arrow": (("X start", "Y start", "X tip", "Y tip"), True, False),
+    "dot": (("X centre", "Y centre", "Radius", ""), False, False),
+    "polygon": (("", "", "", ""), True, False),
 }
 
 
@@ -159,6 +162,29 @@ class Designer(forms.WPFWindow):
     def add_triangle(self, sender, args):
         self._add(sy._t(0, 0, 4, 4, "up", 1, True))
 
+    def add_arrow(self, sender, args):
+        self._add({"type": "arrow", "x1": -5, "y1": 0, "x2": 5, "y2": 0, "head": 2.5, "pen": 1, "fill": True})
+
+    def add_dot(self, sender, args):
+        self._add({"type": "dot", "x": 0, "y": 0, "r": 0.75, "pen": 1, "fill": True})
+
+    def add_polygon(self, sender, args):
+        self._add({"type": "polygon", "pts": [[-3, -2], [3, -2], [4, 2], [-2, 3]], "pen": 1, "fill": False})
+
+    def _rotate(self, deg):
+        item = self.current()
+        if item is not None and self.sel[0] == "shape":
+            item["rot"] = (float(item.get("rot", 0) or 0) + deg) % 360
+            self.fill_props()
+            self._update_list_text()
+            self.redraw()
+
+    def rot_left(self, sender, args):
+        self._rotate(-15)
+
+    def rot_right(self, sender, args):
+        self._rotate(15)
+
     def add_text(self, sender, args):
         self._add({"type": "text", "x": 0, "y": 0, "text": "TEXT", "h": 2.5, "pen": 1})
 
@@ -186,6 +212,12 @@ class Designer(forms.WPFWindow):
             return "Rectangle  %gx%g  pen %d" % (s["w"], s["h"], s["pen"])
         if t == "triangle":
             return "Triangle %s  %gx%g%s" % (s["dir"], s["w"], s["h"], "  filled" if s.get("fill") else "")
+        if t == "arrow":
+            return "Arrow  (%g,%g)->(%g,%g)  head %g" % (s["x1"], s["y1"], s["x2"], s["y2"], s.get("head", 2.5))
+        if t == "dot":
+            return "Dot  r%g" % s["r"]
+        if t == "polygon":
+            return "Polygon  %d points%s" % (len(s["pts"]), "  filled" if s.get("fill") else "")
         return "Text '%s'  %gmm" % (s.get("text", ""), s.get("h", 2.5))
 
     def refresh_lists(self):
@@ -237,8 +269,10 @@ class Designer(forms.WPFWindow):
                 names, can_fill, has_dir = FIELDS[item["type"]]
             for lbl, name in zip((self.l_x, self.l_y, self.l_a, self.l_b), names):
                 lbl.Text = name
-            if self.sel[0] == "shape" and item["type"] == "line":
+            if self.sel[0] == "shape" and item["type"] in ("line", "arrow"):
                 vals = (item["x1"], item["y1"], item["x2"], item["y2"])
+            elif self.sel[0] == "shape" and item["type"] == "polygon":
+                vals = (None, None, None, None)
             else:
                 vals = (item.get("x"), item.get("y"),
                         item.get("r", item.get("w")), item.get("h") if item.get("type") in ("rect", "triangle") else None)
@@ -251,8 +285,16 @@ class Designer(forms.WPFWindow):
             if has_dir:
                 self.f_dir.SelectedItem = item.get("dir", "up")
             is_text = self.sel[0] == "label" or item["type"] == "text"
-            self.f_text.IsEnabled = self.sel[0] == "shape" and item["type"] == "text"
-            self.f_text.Text = item.get("text", "") if self.f_text.IsEnabled else ""
+            is_poly = self.sel[0] == "shape" and item["type"] == "polygon"
+            self.f_text.IsEnabled = self.sel[0] == "shape" and item["type"] in ("text", "polygon")
+            if is_poly:
+                self.f_text.Text = "; ".join("%g,%g" % (x, y) for x, y in item["pts"])
+            else:
+                self.f_text.Text = item.get("text", "") if self.f_text.IsEnabled else ""
+            self.f_rot.IsEnabled = self.sel[0] == "shape"
+            self.f_rot.Text = "%g" % float(item.get("rot", 0) or 0) if self.sel[0] == "shape" else ""
+            self.f_head.IsEnabled = self.sel[0] == "shape" and item["type"] == "arrow"
+            self.f_head.Text = "%g" % item.get("head", 2.5) if self.f_head.IsEnabled else ""
             self.f_h.IsEnabled = self.f_font.IsEnabled = is_text
             if is_text:
                 self.f_h.Text = "%g" % item.get("h", 2.5)
@@ -270,17 +312,25 @@ class Designer(forms.WPFWindow):
         if item is None:
             return
         x, y, a, b = num(self.f_x.Text), num(self.f_y.Text), num(self.f_a.Text), num(self.f_b.Text)
-        if self.sel[0] == "shape" and item["type"] == "line":
+        if self.sel[0] == "shape" and item["type"] in ("line", "arrow"):
             for k, v in zip(("x1", "y1", "x2", "y2"), (x, y, a, b)):
                 if v is not None:
                     item[k] = v
+        elif self.sel[0] == "shape" and item["type"] == "polygon":
+            pts = []
+            for part in self.f_text.Text.split(";"):
+                xy = [num(v) for v in part.split(",")]
+                if len(xy) == 2 and None not in xy:
+                    pts.append(xy)
+            if len(pts) >= 2:
+                item["pts"] = pts
         else:
             if x is not None:
                 item["x"] = x
             if y is not None:
                 item["y"] = y
             if self.sel[0] == "shape":
-                if item["type"] == "circle" and a:
+                if item["type"] in ("circle", "dot") and a:
                     item["r"] = a
                 if item["type"] in ("rect", "triangle"):
                     if a:
@@ -295,6 +345,13 @@ class Designer(forms.WPFWindow):
                 item["dir"] = str(self.f_dir.SelectedItem)
             if item["type"] == "text":
                 item["text"] = self.f_text.Text
+            rot = num(self.f_rot.Text)
+            if rot is not None:
+                item["rot"] = rot
+            if item["type"] == "arrow":
+                head = num(self.f_head.Text)
+                if head:
+                    item["head"] = head
         if self.f_h.IsEnabled:
             picked = getattr(args, "AddedItems", None)
             h = num(picked[0]) if (sender is self.f_h and picked is not None and picked.Count) else num(self.f_h.Text)
@@ -384,6 +441,32 @@ class Designer(forms.WPFWindow):
 
     def draw_shape(self, s, brush):
         t, w = s["type"], self._pen_px(s.get("pen", 1))
+        if t != "text":
+            for p in sy.pieces(s):
+                if p["kind"] == "circle":
+                    e = Ellipse()
+                    e.Width = e.Height = 2 * p["r"] * self._z()
+                    e.Stroke, e.StrokeThickness = brush, w
+                    if p.get("fill"):
+                        e.Fill = brush
+                    px, py = self.to_px(p["x"] - p["r"], p["y"] + p["r"])
+                    Canvas.SetLeft(e, px)
+                    Canvas.SetTop(e, py)
+                    self.canvas.Children.Add(e)
+                elif p.get("closed"):
+                    pg = Polygon()
+                    pg.Points = PointCollection([Point(*self.to_px(x, y)) for x, y in p["pts"]])
+                    pg.Stroke, pg.StrokeThickness = brush, w
+                    if p.get("fill"):
+                        pg.Fill = brush
+                    self.canvas.Children.Add(pg)
+                else:
+                    pts = p["pts"]
+                    for i in range(len(pts) - 1):
+                        x1, y1 = self.to_px(*pts[i])
+                        x2, y2 = self.to_px(*pts[i + 1])
+                        self._ln(x1, y1, x2, y2, brush, w)
+            return
         if t == "line":
             x1, y1 = self.to_px(s["x1"], s["y1"])
             x2, y2 = self.to_px(s["x2"], s["y2"])

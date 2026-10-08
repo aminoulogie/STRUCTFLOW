@@ -155,28 +155,93 @@ def triangle_points(s):
     return [(x - w / 2, y - h / 2), (x + w / 2, y - h / 2), (x, y + h / 2)]
 
 
-def bounds(s):
-    """(x0, y0, x1, y1) of a shape in mm, for hit tests."""
+def _raw_pieces(s):
+    """Unrotated geometry: [{'kind': 'poly', 'pts', 'closed', 'fill'} | {'kind': 'circle', 'x', 'y', 'r', 'fill'}]"""
     t = s["type"]
-    if t == "circle":
-        return s["x"] - s["r"], s["y"] - s["r"], s["x"] + s["r"], s["y"] + s["r"]
+    fill = bool(s.get("fill"))
+    if t in ("circle", "dot"):
+        return [{"kind": "circle", "x": s["x"], "y": s["y"], "r": s["r"], "fill": fill or t == "dot"}]
     if t == "line":
-        return min(s["x1"], s["x2"]), min(s["y1"], s["y2"]), max(s["x1"], s["x2"]), max(s["y1"], s["y2"])
+        return [{"kind": "poly", "pts": [(s["x1"], s["y1"]), (s["x2"], s["y2"])], "closed": False, "fill": False}]
+    if t == "arrow":
+        (x1, y1), (x2, y2) = (s["x1"], s["y1"]), (s["x2"], s["y2"])
+        L = math.hypot(x2 - x1, y2 - y1) or 1.0
+        ux, uy = (x2 - x1) / L, (y2 - y1) / L
+        head = float(s.get("head", 2.5))
+        w = head * 0.35
+        bx, by = x2 - ux * head, y2 - uy * head
+        tri = [(x2, y2), (bx - uy * w, by + ux * w), (bx + uy * w, by - ux * w)]
+        return [{"kind": "poly", "pts": [(x1, y1), (bx, by)], "closed": False, "fill": False},
+                {"kind": "poly", "pts": tri, "closed": True, "fill": s.get("fill", True)}]
     if t == "rect":
-        return s["x"], s["y"], s["x"] + s["w"], s["y"] + s["h"]
+        x, y, w, h = s["x"], s["y"], s["w"], s["h"]
+        return [{"kind": "poly", "pts": [(x, y), (x + w, y), (x + w, y + h), (x, y + h)], "closed": True, "fill": fill}]
     if t == "triangle":
-        pts = triangle_points(s)
-        return (min(p[0] for p in pts), min(p[1] for p in pts), max(p[0] for p in pts), max(p[1] for p in pts))
-    h = s.get("h", 2.5)
-    return s["x"] - h, s["y"] - h / 2, s["x"] + h * max(len(s.get("text", "")), 1) * 0.35, s["y"] + h / 2
+        return [{"kind": "poly", "pts": triangle_points(s), "closed": True, "fill": fill}]
+    if t == "polygon":
+        return [{"kind": "poly", "pts": [tuple(p) for p in s["pts"]], "closed": s.get("closed", True), "fill": fill}]
+    return []
+
+
+def _raw_box(s):
+    pts = []
+    for p in _raw_pieces(s):
+        if p["kind"] == "circle":
+            pts += [(p["x"] - p["r"], p["y"] - p["r"]), (p["x"] + p["r"], p["y"] + p["r"])]
+        else:
+            pts += p["pts"]
+    if not pts:  # text
+        h = s.get("h", 2.5)
+        return s["x"] - h, s["y"] - h / 2, s["x"] + h * max(len(s.get("text", "")), 1) * 0.35, s["y"] + h / 2
+    return min(p[0] for p in pts), min(p[1] for p in pts), max(p[0] for p in pts), max(p[1] for p in pts)
+
+
+def centre(s):
+    x0, y0, x1, y1 = _raw_box(s)
+    return (x0 + x1) / 2.0, (y0 + y1) / 2.0
+
+
+def pieces(s):
+    """Geometry in mm with the shape's rotation (degrees, about its centre)."""
+    rot = math.radians(float(s.get("rot", 0) or 0))
+    raw = _raw_pieces(s)
+    if not rot:
+        return raw
+    cx, cy = centre(s)
+    c, sn = math.cos(rot), math.sin(rot)
+    turn = lambda x, y: (cx + (x - cx) * c - (y - cy) * sn, cy + (x - cx) * sn + (y - cy) * c)
+    out = []
+    for p in raw:
+        q = dict(p)
+        if p["kind"] == "circle":
+            q["x"], q["y"] = turn(p["x"], p["y"])
+        else:
+            q["pts"] = [turn(x, y) for x, y in p["pts"]]
+        out.append(q)
+    return out
+
+
+def bounds(s):
+    """(x0, y0, x1, y1) of a shape in mm (rotation included), for hit tests."""
+    pts = []
+    for p in pieces(s):
+        if p["kind"] == "circle":
+            pts += [(p["x"] - p["r"], p["y"] - p["r"]), (p["x"] + p["r"], p["y"] + p["r"])]
+        else:
+            pts += p["pts"]
+    if not pts:
+        return _raw_box(s)
+    return min(p[0] for p in pts), min(p[1] for p in pts), max(p[0] for p in pts), max(p[1] for p in pts)
 
 
 def move(s, dx, dy):
-    if s["type"] == "line":
+    if s["type"] in ("line", "arrow"):
         s["x1"] += dx
         s["x2"] += dx
         s["y1"] += dy
         s["y2"] += dy
+    elif s["type"] == "polygon":
+        s["pts"] = [[x + dx, y + dy] for x, y in s["pts"]]
     else:
         s["x"] += dx
         s["y"] += dy
@@ -305,20 +370,14 @@ def _P(x, y):
     return XYZ(x * MM, y * MM, 0)
 
 
-def _curves(s):
-    t = s["type"]
-    if t == "line":
-        return [Line.CreateBound(_P(s["x1"], s["y1"]), _P(s["x2"], s["y2"]))]
-    if t == "circle":
-        c, r = _P(s["x"], s["y"]), s["r"] * MM
+def _piece_curves(p):
+    if p["kind"] == "circle":
+        c, r = _P(p["x"], p["y"]), p["r"] * MM
         return [Arc.Create(c, r, 0, math.pi, XYZ.BasisX, XYZ.BasisY),
                 Arc.Create(c, r, math.pi, 2 * math.pi, XYZ.BasisX, XYZ.BasisY)]
-    if t == "rect":
-        x, y, w, h = s["x"], s["y"], s["w"], s["h"]
-        pts = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
-    else:
-        pts = triangle_points(s)
-    return [Line.CreateBound(_P(*pts[i]), _P(*pts[(i + 1) % len(pts)])) for i in range(len(pts))]
+    pts = p["pts"]
+    n = len(pts) if p["closed"] else len(pts) - 1
+    return [Line.CreateBound(_P(*pts[i]), _P(*pts[(i + 1) % len(pts)])) for i in range(n)]
 
 
 def build(doc, design, mode, root, save_file, load, log):
@@ -354,16 +413,18 @@ def build(doc, design, mode, root, save_file, load, log):
                     tt = _text_type(fdoc, note_base[0], design.get("font", "Arial"), float(s.get("h", 2.5)), texts)
                     TextNote.Create(fdoc, view.Id, _P(s["x"], s["y"]), s.get("text", ""), tt.Id)
                     continue
-                curves = _curves(s)
                 style = _pen_style(fdoc, int(s.get("pen", 1)), pens)
-                for c in curves:
-                    dc = fdoc.FamilyCreate.NewDetailCurve(view, c)
-                    dc.LineStyle = style
-                if s.get("fill") and s["type"] != "line" and region is not None:
-                    loop = CurveLoop()
+                for piece in pieces(s):
+                    curves = _piece_curves(piece)
                     for c in curves:
-                        loop.Append(c)
-                    FilledRegion.Create(fdoc, region.Id, view.Id, List[CurveLoop]([loop]))
+                        dc = fdoc.FamilyCreate.NewDetailCurve(view, c)
+                        dc.LineStyle = style
+                    closed = piece["kind"] == "circle" or piece.get("closed")
+                    if piece.get("fill") and closed and region is not None:
+                        loop = CurveLoop()
+                        for c in curves:
+                            loop.Append(c)
+                        FilledRegion.Create(fdoc, region.Id, view.Id, List[CurveLoop]([loop]))
             except Exception as ex:
                 log("shape %s skipped: %s" % (s["type"], br._err(ex)))
         # labels: restyle and move

@@ -51,6 +51,18 @@
                                <TextBox x:Name="suffix" Width="100" TextChanged="changed"/></WrapPanel>
                     <WrapPanel><TextBlock Text="Sample value" Width="110"/><TextBox x:Name="sample" TextChanged="changed"/></WrapPanel>
                 </StackPanel>
+                <StackPanel x:Name="tick_panel">
+                    <TextBlock Text="Tick mark" FontWeight="Bold" Margin="0,10,0,0"/>
+                    <WrapPanel><TextBlock Text="Style" Width="110"/><ComboBox x:Name="t_style" Width="140" SelectionChanged="changed"/></WrapPanel>
+                    <WrapPanel><TextBlock Text="Size (mm)" Width="110"/><TextBox x:Name="t_size" TextChanged="changed"/></WrapPanel>
+                    <WrapPanel><TextBlock Text="Angle (deg)" Width="110"/><TextBox x:Name="t_angle" TextChanged="changed"/>
+                               <TextBlock Foreground="Gray" Text="arrows: width angle"/></WrapPanel>
+                    <WrapPanel><CheckBox x:Name="t_filled" Content="Filled" Click="changed"/><CheckBox x:Name="t_closed" Content="Closed" Click="changed"/></WrapPanel>
+                    <WrapPanel><TextBlock Text="Heavy end pen" Width="110"/><ComboBox x:Name="t_pen" Width="60" SelectionChanged="changed"/></WrapPanel>
+                    <Button Content="Create the EPL tick set" Click="epl_ticks_click"/>
+                    <TextBlock Foreground="Gray" TextWrapping="Wrap"
+                               Text="EPL_Tick_Diagonal_3mm / 2mm, Dot 1.5mm, Arrow 15 / 30 deg. Then pick them as Tick mark on your dimension styles."/>
+                </StackPanel>
                 <StackPanel x:Name="text_panel">
                     <TextBlock Text="Text note" FontWeight="Bold" Margin="0,10,0,0"/>
                     <WrapPanel><CheckBox x:Name="border" Content="Show border" Click="changed"/>

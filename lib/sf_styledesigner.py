@@ -22,11 +22,12 @@ from Autodesk.Revit.DB import (
 
 import sf_audit as au
 import sf_beamrebar as br
+import sf_styles as ss
 
 MM = br.MM
 XAML = os.path.join(os.path.dirname(__file__), "ui_style_designer.xaml")
 FONTS = ["Arial", "Arial Narrow", "ISOCPEUR", "Calibri", "Segoe UI", "Tahoma", "Verdana"]
-KINDS = ["Dimension styles", "Text types"]
+KINDS = ["Dimension styles", "Text types", "Tick marks (arrowheads)"]
 
 # field: (parameter name on dimension types, on text types, kind)
 PARAMS = {
@@ -147,6 +148,10 @@ class StyleDesigner(forms.WPFWindow):
         for name in sorted(self.heads):
             self.tick.Items.Add(name)
             self.leader.Items.Add(name)
+        for _, label in ss.TICK_STYLES:
+            self.t_style.Items.Add(label)
+        for i in range(1, 17):
+            self.t_pen.Items.Add(str(i))
         self.sample.Text = "5000"
         self.sample_text.Text = "TYPICAL NOTE TEXT"
         self.canvas.SizeChanged += lambda s, e: self.redraw()
@@ -162,18 +167,35 @@ class StyleDesigner(forms.WPFWindow):
     def is_dim(self):
         return self.kind.SelectedIndex == 0
 
+    @property
+    def is_tick(self):
+        return self.kind.SelectedIndex == 2
+
     def kind_changed(self, sender, args):
-        cls = DimensionType if self.is_dim else TextNoteType
-        self.type_list = sorted([t for t in FilteredElementCollector(self.doc).OfClass(cls) if br.ename(t)],
-                                key=lambda t: br.ename(t).lower())
+        if self.is_tick:
+            self.type_list = sorted(ss._arrowheads(self.doc).values(), key=lambda t: (br.ename(t) or "").lower())
+            # unnamed arrowheads (e.g. one left after deleting its styles) too
+            known = set(t.Id for t in self.type_list)
+            for t in FilteredElementCollector(self.doc).OfClass(ElementType):
+                try:
+                    if t.FamilyName == "Arrowhead" and t.Id not in known:
+                        self.type_list.append(t)
+                except Exception:
+                    pass
+        else:
+            cls = DimensionType if self.is_dim else TextNoteType
+            self.type_list = sorted([t for t in FilteredElementCollector(self.doc).OfClass(cls) if br.ename(t)],
+                                    key=lambda t: br.ename(t).lower())
         self.types.Items.Clear()
         for t in self.type_list:
             tb = TextBlock()
-            tb.Text = br.ename(t)
+            tb.Text = br.ename(t) or "(no name)  #%s" % t.Id
             self.types.Items.Add(tb)
         from System.Windows import Visibility
-        self.dim_panel.Visibility = Visibility.Visible if self.is_dim else Visibility.Collapsed
-        self.text_panel.Visibility = Visibility.Collapsed if self.is_dim else Visibility.Visible
+        show = lambda on: Visibility.Visible if on else Visibility.Collapsed
+        self.dim_panel.Visibility = show(self.is_dim)
+        self.text_panel.Visibility = show(self.kind.SelectedIndex == 1)
+        self.tick_panel.Visibility = show(self.is_tick)
         if self.type_list:
             self.types.SelectedIndex = 0
 
@@ -187,6 +209,20 @@ class StyleDesigner(forms.WPFWindow):
     def load_values(self):
         el = self.current()
         if el is None:
+            return
+        if self.is_tick:
+            tv = ss.read_tick(el)
+            self._loading = True
+            codes = [c for c, _ in ss.TICK_STYLES]
+            self.t_style.SelectedIndex = codes.index(tv.get("style")) if tv.get("style") in codes else -1
+            self.t_size.Text = "%g" % tv.get("size", 2.0)
+            self.t_angle.Text = "%g" % tv.get("angle", 30)
+            self.t_filled.IsChecked = tv.get("filled", False)
+            self.t_closed.IsChecked = tv.get("closed", False)
+            self.t_pen.SelectedItem = str(tv.get("heavy_pen", 4))
+            self.new_name.Text = (br.ename(el) or "EPL_Tick") + " copy"
+            self._loading = False
+            self.redraw()
             return
         v = read(self.doc, el, self.is_dim)
         self._loading = True
@@ -209,9 +245,16 @@ class StyleDesigner(forms.WPFWindow):
         self._loading = False
         self.redraw()
 
+    def tick_values(self):
+        v = {"size": _num(self.t_size.Text, 2.0), "angle": _num(self.t_angle.Text, 30.0),
+             "filled": bool(self.t_filled.IsChecked), "closed": bool(self.t_closed.IsChecked)}
+        if self.t_style.SelectedIndex >= 0:
+            v["style"] = ss.TICK_STYLES[self.t_style.SelectedIndex][0]
+        if self.t_pen.SelectedItem:
+            v["heavy_pen"] = int(self.t_pen.SelectedItem)
+        return v
+
     def values(self):
-        def picked(combo, args_sender=None):
-            return combo.Text
         v = {"font": self.font.Text.strip() or "Arial", "size": _num(self.size.Text, 2.5),
              "width": _num(self.width.Text, 1.0), "colour": self.colour.Text.strip() or "0,0,0"}
         for k in ("bold", "italic", "underline", "opaque"):
@@ -322,6 +365,9 @@ class StyleDesigner(forms.WPFWindow):
         if c.ActualWidth <= 0 or self.current() is None:
             return
         c.Children.Clear()
+        if self.is_tick:
+            self.draw_tick_preview()
+            return
         try:
             v = self.values()
         except Exception:
@@ -361,13 +407,89 @@ class StyleDesigner(forms.WPFWindow):
             self._ln(lx, ly, ex + 1, ey - 1, brush, self._pen(v.get("pen", 1)))
             self._tick(ex, ey, str(self.leader.SelectedItem or ""), brush, self._pen(v.get("pen", 1)), 1)
 
+    def draw_tick_preview(self):
+        """A dimension line with the tick mark at both ends, drawn from the settings."""
+        c, z = self.canvas, float(self.zoom.Value)
+        v = self.tick_values()
+        W, H = c.ActualWidth, c.ActualHeight
+        cx, cy = W / 2.0, H / 2.0
+        half = min(W * 0.35, 30 * z)
+        k = Brushes.Black
+        self._ln(cx - half, cy, cx + half, cy, k, self._pen(1))
+        for x in (cx - half, cx + half):
+            self._ln(x, cy + 6 * z, x, cy - 6 * z, k, self._pen(1))
+        s = v["size"] * z
+        style = v.get("style", 0)
+        for x, d in ((cx - half, 1), (cx + half, -1)):
+            if style == 0:  # diagonal
+                self._ln(x - s / 2, cy + s / 2, x + s / 2, cy - s / 2, k, self._pen(int(v.get("heavy_pen", 4))))
+            elif style == 7:  # heavy end
+                self._ln(x - s / 2, cy + s / 2, x + s / 2, cy - s / 2, k, self._pen(int(v.get("heavy_pen", 4))) * 2)
+            elif style == 3:  # dot
+                e = Ellipse()
+                e.Width = e.Height = s
+                e.Stroke, e.StrokeThickness = k, 1
+                if v["filled"]:
+                    e.Fill = k
+                Canvas.SetLeft(e, x - s / 2)
+                Canvas.SetTop(e, cy - s / 2)
+                c.Children.Add(e)
+            elif style == 10:  # box
+                r = Rectangle()
+                r.Width = r.Height = s
+                r.Stroke, r.StrokeThickness = k, 1
+                if v["filled"]:
+                    r.Fill = k
+                Canvas.SetLeft(r, x - s / 2)
+                Canvas.SetTop(r, cy - s / 2)
+                c.Children.Add(r)
+            else:  # arrow
+                a = math.radians(v["angle"])
+                tip, back = Point(x, cy), x + d * s
+                w = s * math.tan(a)
+                pg = Polygon()
+                pts = [tip, Point(back, cy - w), Point(back, cy + w)]
+                if v["closed"] or v["filled"]:
+                    pg.Points = PointCollection(pts)
+                    pg.Stroke, pg.StrokeThickness = k, 1
+                    if v["filled"]:
+                        pg.Fill = k
+                    c.Children.Add(pg)
+                else:
+                    self._ln(x, cy, back, cy - w, k, 1)
+                    self._ln(x, cy, back, cy + w, k, 1)
+
+    def epl_ticks_click(self, sender, args):
+        log = []
+        t = Transaction(self.doc, "StructFlow EPL tick marks")
+        t.Start()
+        try:
+            ss.ensure_ticks(self.doc, log.append)
+            t.Commit()
+        except Exception as ex:
+            t.RollBack()
+            log.append("not made: %s" % br._err(ex))
+        self.heads = arrowheads(self.doc)
+        self.tick.Items.Clear()
+        self.leader.Items.Clear()
+        for name in sorted(self.heads):
+            self.tick.Items.Add(name)
+            self.leader.Items.Add(name)
+        self.kind_changed(None, None)
+        self.status.Text = "\n".join(log)
+
     # ------------------------------------------------------------ save
     def _write(self, el):
         log = []
         t = Transaction(self.doc, "StructFlow Style Designer")
         t.Start()
         try:
-            write(self.doc, el, self.is_dim, self.values(), log.append)
+            if self.is_tick:
+                v = self.tick_values()
+                ss.write_tick(el, {"style": v.pop("style", 0)})
+                ss.write_tick(el, v)
+            else:
+                write(self.doc, el, self.is_dim, self.values(), log.append)
             t.Commit()
         except Exception as ex:
             t.RollBack()
@@ -379,7 +501,7 @@ class StyleDesigner(forms.WPFWindow):
         if el is None:
             return
         log = self._write(el)
-        self.status.Text = "\n".join(log) or "saved to %s" % br.ename(el)
+        self.status.Text = "\n".join(log) or "saved to %s" % (br.ename(el) or "the tick mark")
 
     def save_new_click(self, sender, args):
         el = self.current()
@@ -390,7 +512,12 @@ class StyleDesigner(forms.WPFWindow):
         t.Start()
         try:
             new = el.Duplicate(name)
-            write(self.doc, new, self.is_dim, self.values(), lambda m: None)
+            if self.is_tick:
+                v = self.tick_values()
+                ss.write_tick(new, {"style": v.pop("style", 0)})
+                ss.write_tick(new, v)
+            else:
+                write(self.doc, new, self.is_dim, self.values(), lambda m: None)
             t.Commit()
         except Exception as ex:
             t.RollBack()

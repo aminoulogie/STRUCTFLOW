@@ -73,17 +73,17 @@ def text_specs(cfg, extras):
 def dim_specs(cfg, wanted):
     """[(name, style, height, tick, centred, suffix, spot)]"""
     out = []
-    tick = cfg["dimensions"][0].get("tick", "Diagonal 3mm") if cfg.get("dimensions") else "Diagonal 3mm"
-    small_tick = cfg["dimensions"][1].get("tick", "Diagonal 2mm") if len(cfg.get("dimensions", [])) > 1 else tick
+    tick = cfg["dimensions"][0].get("tick", "EPL_Tick_Diagonal_3mm") if cfg.get("dimensions") else "EPL_Tick_Diagonal_3mm"
+    small_tick = cfg["dimensions"][1].get("tick", "EPL_Tick_Diagonal_2mm") if len(cfg.get("dimensions", [])) > 1 else tick
     if "linear" in wanted:
         # no '_Centre' types: Revit's linear dimension style has no text position
         # setting, the text always sits above the line
         for h, tk in ((2.5, tick), (1.8, small_tick)):
             out.append(("EPL_Dim_%gmm" % h, DimensionStyleType.Linear, h, tk, False, "", False))
     if "angular" in wanted:
-        out.append(("EPL_Dim_Angular_2.5mm", DimensionStyleType.Angular, 2.5, "Arrow Filled 15 Degree", False, "", False))
-        out.append(("EPL_Dim_Radial_2.5mm", DimensionStyleType.Radial, 2.5, "Arrow Filled 15 Degree", False, "", False))
-        out.append(("EPL_Dim_Diameter_2.5mm", DimensionStyleType.Diameter, 2.5, "Arrow Filled 15 Degree", False, "", False))
+        out.append(("EPL_Dim_Angular_2.5mm", DimensionStyleType.Angular, 2.5, "EPL_Tick_Arrow_15deg", False, "", False))
+        out.append(("EPL_Dim_Radial_2.5mm", DimensionStyleType.Radial, 2.5, "EPL_Tick_Arrow_15deg", False, "", False))
+        out.append(("EPL_Dim_Diameter_2.5mm", DimensionStyleType.Diameter, 2.5, "EPL_Tick_Arrow_15deg", False, "", False))
     if "spot" in wanted:
         out.append(("EPL_SpotElevation_2.5mm", DimensionStyleType.SpotElevation, 2.5, "", False, "", True))
     if "lap" in wanted:
@@ -125,6 +125,10 @@ def apply(doc, cfg, extras, wanted, log):
     ok = failed = 0
     tr = Transaction(doc, "StructFlow annotation styles")
     tr.Start()
+    try:
+        ensure_ticks(doc, log)
+    except Exception as ex:
+        log("tick marks not made: %s" % br._err(ex))
     texts = dict((br.ename(x), x) for x in FilteredElementCollector(doc).OfClass(TextNoteType))
     base_text = list(texts.values())[0] if texts else None
     for name, h, bold, underline, opaque in text_specs(cfg, extras):
@@ -189,3 +193,69 @@ def apply(doc, cfg, extras, wanted, log):
             log("FAILED    %s: %s" % (name, br._err(ex)))
     tr.Commit()
     return ok, failed
+
+
+# ------------------------------------------------ tick marks (arrowheads)
+# Revit's 'Arrow Style' numbers, read from this model's arrowheads
+TICK_STYLES = [(0, "Diagonal"), (3, "Dot"), (7, "Heavy end"), (8, "Arrow"), (10, "Box")]
+TICK_PARAMS = {"style": "Arrow Style", "size": "Tick Size", "filled": "Fill Tick",
+               "closed": "Arrow Closed", "angle": "Arrow Width Angle", "heavy_pen": "Heavy End Pen Weight"}
+EPL_TICKS = [
+    # name, style, size mm, filled, angle deg
+    ("EPL_Tick_Diagonal_3mm", 0, 3.0, False, 30),
+    ("EPL_Tick_Diagonal_2mm", 0, 2.0, False, 30),
+    ("EPL_Tick_Dot_1.5mm", 3, 1.5, True, 30),
+    ("EPL_Tick_Arrow_15deg", 8, 2.5, True, 15),
+    ("EPL_Tick_Arrow_30deg", 8, 2.5, True, 30),
+]
+
+
+def read_tick(t):
+    import math
+    v = {}
+    for key, name in TICK_PARAMS.items():
+        p = t.LookupParameter(name)
+        if p is None:
+            continue
+        if key == "size":
+            v[key] = round(p.AsDouble() / MM, 2)
+        elif key == "angle":
+            v[key] = round(math.degrees(p.AsDouble()), 1)
+        elif key in ("filled", "closed"):
+            v[key] = bool(p.AsInteger())
+        else:
+            v[key] = p.AsInteger()
+    return v
+
+
+def write_tick(t, v):
+    import math
+    for key, val in v.items():
+        p = t.LookupParameter(TICK_PARAMS[key])
+        if p is None or p.IsReadOnly:
+            continue  # e.g. 'Fill Tick' is locked for diagonal ticks
+        if key == "size":
+            p.Set(float(val) * MM)
+        elif key == "angle":
+            p.Set(math.radians(float(val)))
+        elif key in ("filled", "closed"):
+            p.Set(1 if val else 0)
+        else:
+            p.Set(int(val))
+
+
+def ensure_ticks(doc, log):
+    """Create / update the EPL tick marks (needs at least one arrowhead to copy)."""
+    heads = _arrowheads(doc)
+    if not heads:
+        raise ValueError("no arrowhead left in the model to copy from - undo the deletion (Ctrl+Z) "
+                         "or Transfer Project Standards > Arrowheads from another template")
+    base = list(heads.values())[0]
+    made = {}
+    for name, style, size, filled, angle in EPL_TICKS:
+        t = heads.get(name) or base.Duplicate(name)
+        write_tick(t, {"style": style})
+        write_tick(t, {"size": size, "filled": filled, "angle": angle})
+        made[name] = t
+        log("tick      %s" % name)
+    return made

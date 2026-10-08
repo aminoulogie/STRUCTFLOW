@@ -57,8 +57,8 @@
   },
   "dimensions": [
     // name, text height, tick mark, line pen; UK structural: diagonal ticks, Arial
-    {"name": "EPL_Dim_2.5mm", "text_height": 2.5, "tick": "Diagonal 3mm", "pen": 1, "colour": [0, 0, 0]},
-    {"name": "EPL_Dim_1.8mm", "text_height": 1.8, "tick": "Diagonal 2mm", "pen": 1, "colour": [0, 0, 0]}
+    {"name": "EPL_Dim_2.5mm", "text_height": 2.5, "tick": "EPL_Tick_Diagonal_3mm", "pen": 1, "colour": [0, 0, 0]},
+    {"name": "EPL_Dim_1.8mm", "text_height": 1.8, "tick": "EPL_Tick_Diagonal_2mm", "pen": 1, "colour": [0, 0, 0]}
   ],
 
   // -------------------------------------------- step 4: section standard

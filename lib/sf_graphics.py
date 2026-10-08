@@ -31,6 +31,8 @@ CATS = {
               BuiltInCategory.OST_HiddenStructuralFramingLines),
     "floors": ("Slabs", BuiltInCategory.OST_Floors, BuiltInCategory.OST_HiddenFloorLines),
     "walls": ("Walls", BuiltInCategory.OST_Walls, BuiltInCategory.OST_HiddenWallLines),
+    "foundations": ("Foundations", BuiltInCategory.OST_StructuralFoundation,
+                    BuiltInCategory.OST_HiddenStructuralFoundationLines),
 }
 
 # BS EN 1992-1-1 Table 3.1: grade -> (fck MPa, Ecm GPa)
@@ -73,6 +75,8 @@ PRESETS = {
         "walls": _g(5, 2, "0,0,0", "Solid fill", "170,170,170", "180,180,175"),
         "beams": _g(4, 2, "0,0,0", "Solid fill", "205,205,205", "195,195,190"),
         "floors": _g(3, 1, "0,0,0", "Solid fill", "220,220,220", "210,210,205"),
+        # below ground: dashed in plans, mid grey cut in sections
+        "foundations": _g(4, 2, "0,0,0", "Solid fill", "185,185,185", "150,150,145"),
     },
     # one colour per element type: model reviews and clash coordination
     "Colour coordination": {
@@ -80,6 +84,7 @@ PRESETS = {
         "walls": _g(5, 2, "255,140,0", "Solid fill", "255,215,170", "255,180,110"),
         "beams": _g(4, 2, "30,80,220", "Solid fill", "190,205,255", "120,150,240"),
         "floors": _g(3, 1, "0,160,70", "Solid fill", "190,235,200", "140,210,160"),
+        "foundations": _g(4, 2, "140,90,50", "Solid fill", "225,200,175", "180,140,100"),
     },
     # classic hand-drawn look: concrete stipple in cut, everything black
     "Classic concrete hatch": {
@@ -87,10 +92,12 @@ PRESETS = {
         "walls": _g(5, 2, "0,0,0", "Concrete", "0,0,0", "190,190,190"),
         "beams": _g(4, 2, "0,0,0", "Concrete", "0,0,0", "200,200,200"),
         "floors": _g(3, 1, "0,0,0", "Concrete", "0,0,0", "210,210,210"),
+        "foundations": _g(4, 2, "0,0,0", "Concrete", "0,0,0", "180,180,180"),
     },
 }
 
-DEFAULT_GRADE = {"columns": "C32/40", "walls": "C32/40", "beams": "C32/40", "floors": "C32/40"}
+DEFAULT_GRADE = {"columns": "C32/40", "walls": "C32/40", "beams": "C32/40", "floors": "C32/40",
+                 "foundations": "C28/35"}  # BS 8500 foundations commonly C28/35 (DC-2 ground)
 
 
 def default_material(key):

@@ -22,6 +22,7 @@ import sf_filters as sfl
 
 doc = revit.doc
 CURRENT = "Current model"
+NONE = "(none)"
 GFIELDS_COMBO = ["cut_w", "proj_w", "proj_pattern", "hidden_pattern", "hidden_w", "cut_fill", "surface_fill"]
 GFIELDS_COLOUR = ["colour", "cut_fill_colour", "surface_colour", "shade"]
 MFIELDS = ["fck", "ecm", "density", "poisson", "thermal"]
@@ -179,8 +180,10 @@ class TypeMakerWindow(forms.WPFWindow):
             self.choices = sf.families_of(doc, bic)
             self.base_label.Text = "Family"
             self.param_panel.Visibility = Visibility.Visible
-            self.pattern.Text = "{b}x{h}"
-            self.pattern_hint.Text = "{b} = width, {h} = depth"
+            three = key == "foundations"
+            self.pattern.Text = "{b}x{h}x{d}" if three else "{b}x{h}"
+            self.pattern_hint.Text = ("{b} = width, {h} = length, {d} = thickness" if three
+                                      else "{b} = width, {h} = depth")
             self.sizes_hint.Text = ("Sizes in mm as width x depth, separated by commas or new lines; "
                                     "name one with 'C1: 300x400'.  e.g.  300x300, 300x450, 400x400")
         for name in sorted(self.choices):
@@ -198,11 +201,19 @@ class TypeMakerWindow(forms.WPFWindow):
         if self.kind == "family":
             sym = sf.first_symbol(doc, self.choices[self.base.SelectedItem])
             names = sf.length_params(sym) if sym else []
-            for combo, wanted in ((self.p_w, ["b", "width", "w"]), (self.p_h, ["h", "depth", "d", "height"])):
+            fdn = self.key == "foundations"
+            for combo, wanted in ((self.p_w, ["width", "b", "w", "diameter"]),
+                                  (self.p_h, ["length", "l", "h", "depth", "d", "height", "diameter"])):
                 combo.Items.Clear()
                 for n in names:
                     combo.Items.Add(n)
-                combo.SelectedItem = sf.guess(names, wanted)
+                combo.SelectedItem = sf.guess(names, wanted if fdn else [w for w in wanted if w not in ("length", "l", "diameter")] or wanted)
+            self.p_d.Items.Clear()
+            self.p_d.Items.Add(NONE)
+            for n in names:
+                self.p_d.Items.Add(n)
+            pick = [n for n in names if n.lower() in ("foundation thickness", "thickness", "t", "depth")] if fdn else []
+            self.p_d.SelectedItem = pick[0] if pick else NONE
         if self.edit_mode.IsChecked:
             self.edit_changed(None, None)
         if self.key is not None:
@@ -216,7 +227,8 @@ class TypeMakerWindow(forms.WPFWindow):
         if not on:
             return
         base = self.choices[self.base.SelectedItem]
-        self.sizes.Text = sf.describe_existing(doc, self.key, base, self.p_w.SelectedItem, self.p_h.SelectedItem)
+        self.sizes.Text = sf.describe_existing(doc, self.key, base, self.p_w.SelectedItem, self.p_h.SelectedItem,
+                                               self._p_d())
         types = (sf.host_types(doc, self.key) if self.kind == "host"
                  else dict((sf.br.ename(s), s) for s in sf.symbols_of(doc, base)))
         for name in sorted(types):
@@ -265,6 +277,10 @@ class TypeMakerWindow(forms.WPFWindow):
             forms.alert("Nothing deleted: %s" % ex)
             return
         self.edit_changed(None, None)
+
+    def _p_d(self):
+        val = self.p_d.SelectedItem
+        return None if val in (None, NONE) or self.kind == "host" else val
 
     def _family_name(self):
         base = self.choices[self.base.SelectedItem]
@@ -341,7 +357,7 @@ class TypeMakerWindow(forms.WPFWindow):
         first size typed, else the family's first type."""
         typed = None
         try:
-            typed = sf.parse_sizes(self.sizes.Text, self.kind == "family")[0][1]
+            typed = sf.parse_sizes(self.sizes.Text, self.kind == "family", bool(self._p_d()))[0][1]
         except Exception:
             pass
         sel = self.selected_types() if self.edit_mode.IsChecked else []
@@ -353,6 +369,15 @@ class TypeMakerWindow(forms.WPFWindow):
             return sp.rect_profile(*(typed or (300.0, 450.0)))
         sym = sel[0] if sel else sf.first_symbol(doc, self.choices[self.base.SelectedItem])
         prof = sp.profile_of_symbol(sym, self.p_w.SelectedItem, self.p_h.SelectedItem)
+        if self.key == "foundations":
+            prof = dict(prof)
+            pd = self._p_d()
+            prof["d"] = sp._param_mm(sym, pd) if pd else 600.0
+            if typed and not sel:
+                prof["w"], prof["h"] = typed[0], typed[1]
+                if len(typed) > 2:
+                    prof["d"] = typed[2]
+            return prof
         if typed and not sel and prof["shape"] in ("rect", "circle"):
             prof = dict(prof)
             prof["w"], prof["h"] = (typed[0], typed[0]) if prof["shape"] == "circle" else typed
@@ -378,7 +403,7 @@ class TypeMakerWindow(forms.WPFWindow):
             forms.alert("Nothing to copy from: load a family / type of this category first.")
             return
         try:
-            entries = sf.parse_sizes(self.sizes.Text, self.kind == "family")
+            entries = sf.parse_sizes(self.sizes.Text, self.kind == "family", bool(self._p_d()))
             g = self._get_graphics()
             m = self._get_material()
         except ValueError as ex:
@@ -390,7 +415,7 @@ class TypeMakerWindow(forms.WPFWindow):
         self.result = {
             "key": self.key, "kind": self.kind, "base": self.choices[self.base.SelectedItem],
             "pattern": self.pattern.Text, "entries": entries, "update": bool(self.update.IsChecked),
-            "p_w": self.p_w.SelectedItem, "p_h": self.p_h.SelectedItem,
+            "p_w": self.p_w.SelectedItem, "p_h": self.p_h.SelectedItem, "p_d": self._p_d(),
             "g": g, "m": m, "mats": self.materials(m), "per_material": bool(self.per_material.IsChecked),
             "apply_styles": bool(self.apply_styles.IsChecked),
             "apply_view": bool(self.apply_view.IsChecked),
@@ -420,7 +445,7 @@ if r:
                 return sf.make_host_types(doc, r["key"], r["base"], r["pattern"], entries,
                                           r["update"], log.append)
             return sf.make_family_types(doc, r["base"], r["pattern"], entries,
-                                        r["p_w"], r["p_h"], r["update"], log.append)
+                                        r["p_w"], r["p_h"], r["update"], log.append, r["p_d"])
 
         if r["apply_styles"]:
             sg.apply_object_styles(doc, r["key"], r["g"])

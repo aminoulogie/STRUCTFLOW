@@ -231,6 +231,7 @@ def draw(canvas, key, prof, g, dashes=None):
         "beams": ("Plan - beam below slab (hidden lines)", "Section - cut", "3D shaded"),
         "floors": ("Plan - slab in projection", "Section - cut", "3D shaded"),
         "walls": ("Plan - cut", "Section - cut", "3D shaded"),
+        "foundations": ("Plan - below ground (hidden lines)", "Section - cut", "3D shaded"),
     }[key]
     for i, title in enumerate(titles):
         top = i * (PANEL_H + GAP)
@@ -248,6 +249,20 @@ def draw(canvas, key, prof, g, dashes=None):
     hid_dash = _dash(dashes, g["hidden_pattern"], hid_w)
     if hid_dash is None and g["hidden_pattern"] not in ("Solid", "") and not dashes:
         hid_dash = DoubleCollection([4.0, 3.0])
+
+    if key == "foundations":
+        w, l, d = prof["w"], prof["h"], prof.get("d", 600.0)
+        round_ = prof["shape"] in ("circle", "ring")
+        foot = sp.polygons({"shape": "circle", "w": w, "h": w} if round_ else sp.rect_profile(w, l))[0]
+        sc = _scale_for(w, w if round_ else l, bw * 0.8, bh * 0.85)
+        _shape2d(canvas, foot, [], cx, cys[0], sc, "None", "0,0,0", g["colour"], hid_w, hid_dash)
+        sec = [(-w / 2.0, -d / 2.0), (w / 2.0, -d / 2.0), (w / 2.0, d / 2.0), (-w / 2.0, d / 2.0)]
+        sc2 = _scale_for(w, d, bw * 0.8, bh * 0.85)
+        _shape2d(canvas, sec, [], cx, cys[1], sc2, g["cut_fill"], g["cut_fill_colour"], g["colour"], cut_w)
+        _extrusion(canvas, foot, [], "z", d, g, cx, cys[2], bw * 0.8, bh)
+        _text(canvas, 8, PANEL_H + GAP + PANEL_H - 18,
+              ("pile %g, length %g" % (w, d)) if round_ else ("%g x %g x %g" % (w, l, d)))
+        return
 
     if key in ("columns", "beams"):
         outer, holes = sp.polygons(prof)

@@ -19,6 +19,7 @@ CATEGORIES = [
     ("beams", "Beams (structural framing)", BuiltInCategory.OST_StructuralFraming, "family"),
     ("floors", "Slabs (floors)", BuiltInCategory.OST_Floors, "host"),
     ("walls", "Walls", BuiltInCategory.OST_Walls, "host"),
+    ("foundations", "Foundations (pads, pile caps, piles)", BuiltInCategory.OST_StructuralFoundation, "family"),
 ]
 
 
@@ -68,7 +69,7 @@ def guess(names, wanted):
     return names[0] if names else ""
 
 
-def parse_sizes(text, two):
+def parse_sizes(text, two, three=False):
     """Entries separated by commas or new lines, optionally named:
     '300x300, C1: 300x400'  ->  [(None, (300, 300)), ('C1', (300, 400))]
     '150, Slab A: 200'       ->  [(None, (150,)), ('Slab A', (200,))]"""
@@ -83,7 +84,11 @@ def parse_sizes(text, two):
         nums = re.findall(r"\d+(?:\.\d+)?", tok)
         if not nums:
             continue
-        if two:
+        if three:
+            if len(nums) < 3:
+                raise ValueError("'%s' needs three numbers, e.g. 1500x1500x600" % tok.strip())
+            out.append((name, (float(nums[0]), float(nums[1]), float(nums[2]))))
+        elif two:
             if len(nums) < 2:
                 raise ValueError("'%s' needs two numbers, e.g. 300x600" % tok.strip())
             out.append((name, (float(nums[0]), float(nums[1]))))
@@ -102,6 +107,8 @@ def type_name(pattern, size):
     name = pattern.replace("{b}", _fmt(size[0])).replace("{t}", _fmt(size[0]))
     if len(size) > 1:
         name = name.replace("{h}", _fmt(size[1]))
+    if len(size) > 2:
+        name = name.replace("{d}", _fmt(size[2]))
     return name
 
 
@@ -110,7 +117,7 @@ def thickness_of(host_type):
     return sum(cs.GetLayerWidth(i) for i in range(cs.LayerCount)) / MM if cs else 0.0
 
 
-def describe_existing(doc, key, base, p_w=None, p_h=None):
+def describe_existing(doc, key, base, p_w=None, p_h=None, p_d=None):
     """Existing types as editable 'Name: size' lines."""
     lines = []
     if key in ("floors", "walls"):
@@ -121,12 +128,15 @@ def describe_existing(doc, key, base, p_w=None, p_h=None):
             pw, ph = sym.LookupParameter(p_w), sym.LookupParameter(p_h)
             if pw is None or ph is None:
                 continue
-            lines.append("%s: %gx%g" % (br.ename(sym), round(pw.AsDouble() / MM, 1),
-                                        round(ph.AsDouble() / MM, 1)))
+            line = "%s: %gx%g" % (br.ename(sym), round(pw.AsDouble() / MM, 1), round(ph.AsDouble() / MM, 1))
+            pd = sym.LookupParameter(p_d) if p_d else None
+            if pd is not None:
+                line += "x%g" % round(pd.AsDouble() / MM, 1)
+            lines.append(line)
     return "\n".join(lines)
 
 
-def make_family_types(doc, family, pattern, entries, p_w, p_h, update, log):
+def make_family_types(doc, family, pattern, entries, p_w, p_h, update, log, p_d=None):
     base = first_symbol(doc, family)
     existing = dict((br.ename(s), s) for s in symbols_of(doc, family))
     touched = []
@@ -140,7 +150,10 @@ def make_family_types(doc, family, pattern, entries, p_w, p_h, update, log):
         if sym is None:
             sym = base.Duplicate(name)
             existing[name] = sym
-        for pname, val in ((p_w, size[0]), (p_h, size[1])):
+        pairs = [(p_w, size[0]), (p_h, size[1])]
+        if p_d and len(size) > 2:
+            pairs.append((p_d, size[2]))
+        for pname, val in pairs:
             p = sym.LookupParameter(pname)
             if p is None or p.IsReadOnly:
                 raise ValueError("type parameter '%s' not found or read-only" % pname)

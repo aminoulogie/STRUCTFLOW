@@ -29,6 +29,8 @@
                             <StackPanel x:Name="param_panel">
                                 <WrapPanel><TextBlock Text="Width parameter" Width="140"/><ComboBox x:Name="p_w" Width="160"/></WrapPanel>
                                 <WrapPanel><TextBlock Text="Depth parameter" Width="140"/><ComboBox x:Name="p_h" Width="160"/></WrapPanel>
+                                <WrapPanel><TextBlock Text="Third (thickness...)" Width="140"/><ComboBox x:Name="p_d" Width="160"/>
+                                    <TextBlock Foreground="Gray" Text="pads / pile caps: thickness; leave (none) for columns and beams"/></WrapPanel>
                             </StackPanel>
                             <WrapPanel>
                                 <TextBlock Text="New type name" Width="140"/><TextBox x:Name="pattern" Width="180"/>

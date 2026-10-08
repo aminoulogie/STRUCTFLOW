@@ -257,6 +257,10 @@ class Designer(forms.WPFWindow):
             if is_text:
                 self.f_h.Text = "%g" % item.get("h", 2.5)
                 self.f_font.Text = item.get("font", cfg["text"]["font"])
+            is_label = self.sel[0] == "label"
+            self.f_box.IsEnabled = self.f_gap.IsEnabled = is_label
+            self.f_box.IsChecked = bool(item.get("box")) if is_label else False
+            self.f_gap.Text = "%g" % item.get("box_offset", 1.0) if is_label else ""
         self._loading = False
 
     def prop_changed(self, sender, args):
@@ -292,11 +296,17 @@ class Designer(forms.WPFWindow):
             if item["type"] == "text":
                 item["text"] = self.f_text.Text
         if self.f_h.IsEnabled:
-            h = num(self.f_h.Text)
+            picked = getattr(args, "AddedItems", None)
+            h = num(picked[0]) if (sender is self.f_h and picked is not None and picked.Count) else num(self.f_h.Text)
             if h:
                 item["h"] = h
             if self.f_font.Text.strip():
                 item["font"] = self.f_font.Text.strip()
+        if self.sel[0] == "label":
+            item["box"] = bool(self.f_box.IsChecked)
+            gap = num(self.f_gap.Text)
+            if gap is not None:
+                item["box_offset"] = gap
         self._update_list_text()
         self.redraw()
 
@@ -369,7 +379,8 @@ class Designer(forms.WPFWindow):
         for i, lab in enumerate(self.design["labels"]):
             text = self.base_labels[i][0] if i < len(self.base_labels) else "LABEL %d" % (i + 1)
             self.draw_text(lab["x"], lab["y"], text, lab["h"],
-                           BLUE if self.sel == ("label", i) else SolidColorBrush(Color.FromRgb(90, 90, 90)), True)
+                           BLUE if self.sel == ("label", i) else SolidColorBrush(Color.FromRgb(90, 90, 90)), True,
+                           lab.get("box_offset", 1.0) if lab.get("box") else None)
 
     def draw_shape(self, s, brush):
         t, w = s["type"], self._pen_px(s.get("pen", 1))
@@ -402,7 +413,7 @@ class Designer(forms.WPFWindow):
         else:
             self.draw_text(s["x"], s["y"], s.get("text", ""), s.get("h", 2.5), brush, False)
 
-    def draw_text(self, x, y, text, h, brush, boxed):
+    def draw_text(self, x, y, text, h, brush, boxed, border=None):
         tb = TextBlock()
         tb.Text = text
         tb.FontFamily = FontFamily(cfg["text"]["font"])
@@ -414,6 +425,14 @@ class Designer(forms.WPFWindow):
         Canvas.SetLeft(tb, px - tw / 2)
         Canvas.SetTop(tb, py - th / 2)
         self.canvas.Children.Add(tb)
+        if border is not None:
+            g = border * self._z()
+            frame = Rectangle()
+            frame.Width, frame.Height = tw + 2 * g, th + 2 * g
+            frame.Stroke, frame.StrokeThickness = Brushes.Black, self._pen_px(1)
+            Canvas.SetLeft(frame, px - tw / 2 - g)
+            Canvas.SetTop(frame, py - th / 2 - g)
+            self.canvas.Children.Add(frame)
         if boxed:
             r = Rectangle()
             r.Width, r.Height = tw + 4, th

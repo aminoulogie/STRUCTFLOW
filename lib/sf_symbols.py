@@ -124,8 +124,8 @@ def preset(kind, cfg=None):
         shapes = [_c(0, 0, 2.5, 1)]
         labels = [_lab(0, 0, 2.5, font), _lab(4, 0, 2.5, font)]
     elif kind in ("column_tag", "beam_tag", "foundation_tag"):
-        shapes = [_r(-9, -2.5, 18, 5, 1)]
-        labels = [_lab(0, 0, 2.5, font)]
+        # the box grows with the text: label border, not a drawn rectangle
+        labels = [dict(_lab(0, 0, 2.5, font), box=True, box_offset=1.0)]
     elif kind == "revision_tag":
         shapes = [_t(0, 0, 7, 6, "up", 1, False)]
         labels = [_lab(0, -0.5, 2.5, font)]
@@ -197,13 +197,26 @@ def annotation_families(doc):
 
 
 def family_labels(doc, family):
-    """[(text, x mm, y mm, height mm)] of the labels inside the family."""
+    """[(what it shows, x mm, y mm, height mm)] of the labels in the family;
+    'what it shows' lists the parameters, e.g. 'Quantity | Type | Comments'."""
     fdoc = doc.EditFamily(family)
     try:
-        return [(lab.Text or "label", lab.Coord.X / MM, lab.Coord.Y / MM, _text_height(fdoc, lab))
+        return [(_label_contents(fdoc, lab), lab.Coord.X / MM, lab.Coord.Y / MM, _text_height(fdoc, lab))
                 for lab in _labels(fdoc)]
     finally:
         fdoc.Close(False)
+
+
+def _label_contents(fdoc, lab):
+    names = []
+    try:
+        for fmt in lab.GetParameterFormatting():
+            d = fmt.GetParameterDefinition(fdoc)
+            if d is not None:
+                names.append((fmt.Prefix or "") + d.Name + (fmt.Suffix or ""))
+    except Exception:
+        pass
+    return " | ".join(names) or (lab.Text or "label")
 
 
 def _labels(fdoc):
@@ -233,16 +246,19 @@ class _LoadOptions(IFamilyLoadOptions):
         return True
 
 
-def _text_type(fdoc, base_type, font, h, cache):
-    """A text / label type 'EPL <font> <h>mm', black, width factor 1."""
-    key = (base_type.Id, font, h)
+def _text_type(fdoc, base_type, font, h, cache, box=False, box_offset=1.0):
+    """A text / label type 'EPL <font> <h>mm', black, width factor 1;
+    with box=True Revit draws a border that fits the text ('Show Border')."""
+    key = (base_type.Id, font, h, box, box_offset)
     if key in cache:
         return cache[key]
-    name = "EPL %s %gmm" % (font, h)
+    name = "EPL %s %gmm%s" % (font, h, " Box" if box else "")
     existing = [t for t in FilteredElementCollector(fdoc).OfClass(type(base_type)) if br.ename(t) == name]
     t = existing[0] if existing else base_type.Duplicate(name)
     for bip, val in ((BuiltInParameter.TEXT_FONT, font), (BuiltInParameter.TEXT_SIZE, h * MM),
-                     (BuiltInParameter.TEXT_WIDTH_SCALE, 1.0), (BuiltInParameter.LINE_COLOR, 0)):
+                     (BuiltInParameter.TEXT_WIDTH_SCALE, 1.0), (BuiltInParameter.LINE_COLOR, 0),
+                     (BuiltInParameter.TEXT_BOX_VISIBILITY, 1 if box else 0),
+                     (BuiltInParameter.LEADER_OFFSET_SHEET, box_offset * MM)):
         p = t.get_Parameter(bip)
         if p is not None and not p.IsReadOnly:
             p.Set(val)
@@ -359,7 +375,8 @@ def build(doc, design, mode, root, save_file, load, log):
             lab = labels[i]
             try:
                 lt = _text_type(fdoc, fdoc.GetElement(lab.GetTypeId()), spec.get("font", "Arial"),
-                                float(spec.get("h", 2.5)), texts)
+                                float(spec.get("h", 2.5)), texts, bool(spec.get("box")),
+                                float(spec.get("box_offset", 1.0)))
                 lab.ChangeTypeId(lt.Id)
                 lab.Coord = _P(spec["x"], spec["y"])
             except Exception as ex:

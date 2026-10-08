@@ -64,8 +64,8 @@
                 <GroupBox Header="Shapes">
                     <ListBox x:Name="shapes" Height="130" SelectionChanged="shape_picked"/>
                 </GroupBox>
-                <GroupBox Header="Labels (from the base family)">
-                    <ListBox x:Name="labels" Height="80" SelectionChanged="label_picked"/>
+                <GroupBox Header="Labels (from the base family) - what each one shows">
+                    <ListBox x:Name="labels" Height="90" SelectionChanged="label_picked"/>
                 </GroupBox>
                 <GroupBox x:Name="props_box" Header="Properties">
                     <StackPanel>
@@ -77,6 +77,9 @@
                                    <CheckBox x:Name="f_fill" Content="Filled (solid black)" VerticalAlignment="Center" Click="prop_changed"/></WrapPanel>
                         <WrapPanel><TextBlock Text="Direction" Width="55"/><ComboBox x:Name="f_dir" Width="90" SelectionChanged="prop_changed"/></WrapPanel>
                         <WrapPanel><TextBlock Text="Text" Width="55"/><TextBox x:Name="f_text" Width="200" TextChanged="prop_changed"/></WrapPanel>
+                        <CheckBox x:Name="f_box" Content="Box around the label (grows with the text)" Click="prop_changed"/>
+                        <WrapPanel><TextBlock Text="Box gap" Width="55"/><TextBox x:Name="f_gap" Width="60" TextChanged="prop_changed"/>
+                                   <TextBlock Foreground="Gray" Text="mm between text and box"/></WrapPanel>
                         <WrapPanel><TextBlock Text="Height" Width="55"/><ComboBox x:Name="f_h" Width="70" IsEditable="True" SelectionChanged="prop_changed" KeyUp="prop_changed"/>
                                    <TextBlock Text="Font"/><TextBox x:Name="f_font" Width="90" TextChanged="prop_changed"/></WrapPanel>
                     </StackPanel>

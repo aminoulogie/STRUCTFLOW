@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+plugin/bin/
+*.gcrobot.json
+!examples/*.gcrobot.json

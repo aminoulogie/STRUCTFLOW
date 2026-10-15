@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "levels": {
+    "Deck": {
+      "offset": "0.23",
+      "relative_to": ""
+    },
+    "Shallow bottom": {
+      "offset": "-1.45",
+      "relative_to": "Deck"
+    },
+    "Deep bottom": {
+      "offset": "-2.37",
+      "relative_to": "Deck"
+    },
+    "Wall top": {
+      "offset": "0.20",
+      "relative_to": "Deck"
+    }
+  },
+  "active": "Shallow bottom",
+  "grids": [
+    {
+      "name": "Pool",
+      "x": [
+        "0",
+        "2.37",
+        "5.12"
+      ],
+      "y": [
+        "0",
+        "3.25",
+        "7.60"
+      ],
+      "origin_x": "0",
+      "origin_y": "0",
+      "angle": "0",
+      "levels": []
+    },
+    {
+      "name": "Walls",
+      "x": [
+        "0",
+        "0.25",
+        "5.12",
+        "5.37"
+      ],
+      "y": [
+        "0",
+        "0.25",
+        "7.60",
+        "7.85"
+      ],
+      "origin_x": "0",
+      "origin_y": "0",
+      "angle": "0",
+      "levels": []
+    }
+  ]
+}

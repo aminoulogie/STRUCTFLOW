@@ -1,0 +1,95 @@
+I9 F=None  V=None
+I10 F=None  V=None
+I11 F=None  V=None
+C352 F=='Semelle isolée-B2 (2)'!D9  V=-0.42
+D352 F==I9  V=0
+E352 F==ABS(D352/B352)  V=0
+F352 F==ABS(C352/B352)  V=0.004280036686028737
+B352 F==$H$5+'Semelle isolée-B2 (2)'!C9  V=98.13
+D9 F=-0.42  V=-0.42
+E9 F=41.36  V=41.36
+SHEET Semelle isolée-B2 (2): errors 32 ['C305', 'D305', 'E305', 'C306', 'D306', 'E306', 'C307', 'D307', 'E307', 'C308', 'D308', 'E308'] | NON OK 62 ['F142:traction_condition non vérifiée', 'F143:traction_condition non vérifiée', 'F168:traction_condition non vérifiée', 'F169:Condition non vérifiée', 'F170:traction_condition non vérifiée', 'F171:traction_condition non vérifiée']
+SHEET RECAP: errors 2 ['F95', 'G95'] | NON OK 0 []
+SHEET Semelle isolée-B2: errors 32 ['C41', 'D41', 'E41', 'C42', 'D42', 'E42', 'C43', 'D43', 'E43', 'C44', 'D44', 'E44'] | NON OK 0 []
+SHEET Semelle isolée-B1: errors 35 ['B8', 'C41', 'D41', 'E41', 'C42', 'D42', 'E42', 'C43', 'D43', 'E43', 'C44', 'D44'] | NON OK 0 []
+SHEET Semelle isolée-A1: errors 35 ['B8', 'C41', 'D41', 'E41', 'C42', 'D42', 'E42', 'C43', 'D43', 'E43', 'C44', 'D44'] | NON OK 0 []
+SHEET Semelle isolée-A2: errors 35 ['B8', 'C41', 'D41', 'E41', 'C42', 'D42', 'E42', 'C43', 'D43', 'E43', 'C44', 'D44'] | NON OK 1 ['I23:traction_condition non vérifiée']
+RECAP B3 ='Semelle isolée-B2'!$B$7
+RECAP C3 ='Semelle isolée-B1'!B7
+RECAP D3 ='Semelle isolée-A1'!B7
+RECAP E3 ='Semelle isolée-A2'!B7
+RECAP A4 A(m)
+RECAP B4 ='Semelle isolée-B2'!D5
+RECAP C4 1.7
+RECAP D4 1.7
+RECAP E4 1.7
+RECAP A5 B(m)
+RECAP B5 ='Semelle isolée-B2'!E5
+RECAP C5 1.7
+RECAP D5 1.7
+RECAP E5 1.7
+RECAP A6 d (m)
+RECAP B6 =(B$5-0.2)/4
+RECAP C6 =(C$5-0.2)/4
+RECAP D6 =(D$5-0.2)/4
+RECAP E6 =(E$5-0.2)/4
+RECAP A7 hmin (m)
+RECAP B7 =MAX((B$5-0.2)/4,(B$5-0.35)/4)+0.05
+RECAP C7 =MAX((C$5-0.2)/4,(C$5-0.35)/4)+0.05
+RECAP D7 =MAX((D$5-0.2)/4,(D$5-0.35)/4)+0.05
+RECAP E7 =MAX((E$5-0.2)/4,(E$5-0.35)/4)+0.05
+RECAP A8 H (user)
+RECAP B8 ='Semelle isolée-B2'!F5
+RECAP C8 0.4
+RECAP D8 ='Semelle isolée-A1'!F5
+RECAP E8 ='Semelle isolée-A2'!F5
+RECAP A9 h max
+RECAP B9 =MIN((B5-0.2)/2,(B5-0.35)/2)
+RECAP C9 =MIN((C5-0.2)/2,(C5-0.35)/2)
+RECAP D9 =MIN((D5-0.2)/2,(D5-0.35)/2)
+RECAP E9 =MIN((E5-0.2)/2,(E5-0.35)/2)
+RECAP A10 FERR //B
+RECAP B10 ='Semelle isolée-B2'!F38
+RECAP C10 ='Semelle isolée-B1'!F38
+RECAP D10 ='Semelle isolée-A2'!F38
+RECAP E10 ='Semelle isolée-A1'!F38
+RECAP A11 FERR // L
+RECAP B11 ='Semelle isolée-B2'!F39
+RECAP C11 ='Semelle isolée-B1'!F39
+RECAP D11 ='Semelle isolée-A2'!F39
+RECAP E11 ='Semelle isolée-A1'!F39
+RECAP A12 FERR //B
+RECAP B12 T12esp20cm
+RECAP C12 T12esp20cm
+RECAP D12 T12esp20cm
+RECAP E12 T12esp20cm
+Semelle isolée-B2 B2 F=500 V=500
+Semelle isolée-B2 C2 F=25 V=25
+Semelle isolée-B2 D2 F=1.5 V=1.5
+Semelle isolée-B2 E2 F=2 V=2
+Semelle isolée-B2 D5 F=2 V=2
+Semelle isolée-B2 E5 F=2 V=2
+Semelle isolée-B2 F5 F=0.4 V=0.4
+Semelle isolée-B2 C4 F=0.5 V=0.5
+Semelle isolée-B2 C5 F=0.5 V=0.5
+Semelle isolée-B2 H3 F==(F2*D2)*((D5*'Semel V=112.5
+Semelle isolée-B2 H5 F==H4+H3+Z12 V=152.5
+Semelle isolée-B2 C9 F=68.13 V=68.13
+Semelle isolée-B2 E9 F=41.36 V=41.36
+Semelle isolée-B2 E142 F=N2= V=N2=
+Semelle isolée-B2 F142 F=600 V=600
+Semelle isolée-A1 B2 F=500 V=500
+Semelle isolée-A1 C2 F=25 V=25
+Semelle isolée-A1 D2 F=1.5 V=1.5
+Semelle isolée-A1 E2 F=2 V=2
+Semelle isolée-A1 D5 F=1.7 V=1.7
+Semelle isolée-A1 E5 F=1.7 V=1.7
+Semelle isolée-A1 F5 F=0.4 V=0.4
+Semelle isolée-A1 C4 F=0.3 V=0.3
+Semelle isolée-A1 C5 F=0.3 V=0.3
+Semelle isolée-A1 H3 F==H48 V=9.45
+Semelle isolée-A1 H5 F=None V=None
+Semelle isolée-A1 C9 F=125.4102 V=125.4102
+Semelle isolée-A1 E9 F=-0.9721 V=-0.9721
+Semelle isolée-A1 E142 F=N2= V=N2=
+Semelle isolée-A1 F142 F=600 V=600

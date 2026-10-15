@@ -1,0 +1,220 @@
+370 INFO: PyInstaller: 6.22.3, contrib hooks: 2026.8
+370 INFO: Python: 3.12.10
+418 INFO: Platform: Windows-11-10.0.26200-SP0
+418 INFO: Python environment: C:\Users\pro\AppData\Local\Programs\Python\Python312
+Note: API not available due to missing dependencies: sequence.recalculate_schedule - No module named 'networkx'
+13450 INFO: Module search paths (PYTHONPATH):
+['C:\\Users\\pro\\Desktop\\GCSTRUCTFLOW\\ISOLATED_FOOTINGS',
+ 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\python312.zip',
+ 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\DLLs',
+ 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib',
+ 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312',
+ 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages',
+ 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\win32',
+ 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\win32\\lib',
+ 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\pythonwin',
+ 'C:\\Users\\pro\\Desktop\\GCSTRUCTFLOW\\ISOLATED_FOOTINGS']
+14361 INFO: Appending 'binaries' from .spec
+14408 INFO: Appending 'datas' from .spec
+14693 INFO: checking Analysis
+14803 INFO: Building because excludes changed
+14803 INFO: Looking for Python shared library...
+14803 INFO: Using Python shared library: C:\Users\pro\AppData\Local\Programs\Python\Python312\python312.dll
+14803 INFO: Running Analysis Analysis-00.toc
+14803 INFO: Target bytecode optimization level: 0
+14804 INFO: Initializing module dependency graph...
+14808 INFO: Initializing module graph hook caches...
+14849 INFO: Analyzing modules for base_library.zip ...
+17529 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+18356 INFO: Processing standard module hook 'hook-math.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+18722 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+20176 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+22170 INFO: Caching module dependency graph...
+22230 INFO: Analyzing C:\Users\pro\Desktop\GCSTRUCTFLOW\ISOLATED_FOOTINGS\semelles_app.py
+22418 INFO: Processing standard module hook 'hook-PySide6.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+22750 INFO: Processing standard module hook 'hook-shiboken6.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+22943 INFO: Processing standard module hook 'hook-PySide6.QtNetwork.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+27482 INFO: Processing standard module hook 'hook-PySide6.QtCore.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+33557 INFO: Processing standard module hook 'hook-PySide6.QtGui.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+62458 INFO: Processing standard module hook 'hook-PySide6.QtWidgets.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+67663 INFO: Processing standard module hook 'hook-pandas.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+71264 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+71307 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+71339 INFO: Processing standard module hook 'hook-numpy.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+72209 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+72214 INFO: SetuptoolsInfo: initializing cached setuptools info...
+73934 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+74193 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+74564 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+76076 INFO: Processing standard module hook 'hook-webbrowser.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+78071 INFO: Processing standard module hook 'hook-difflib.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+79128 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+79890 INFO: Processing standard module hook 'hook-zoneinfo.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+82223 INFO: Processing standard module hook 'hook-pandas.io.formats.style.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+87026 INFO: Processing standard module hook 'hook-pandas.plotting.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+87114 INFO: Processing standard module hook 'hook-matplotlib.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+87748 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+88365 INFO: Processing standard module hook 'hook-matplotlib.backend_bases.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+88609 INFO: Processing standard module hook 'hook-PIL.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+88797 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+89700 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+89966 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+91191 INFO: Processing standard module hook 'hook-jinja2.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+92037 INFO: Processing standard module hook 'hook-matplotlib.backends.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+92182 INFO: Processing standard module hook 'hook-matplotlib.pyplot.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+92423 INFO: Processing standard module hook 'hook-matplotlib.figure.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+93542 INFO: Processing standard module hook 'hook-dateutil.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+93715 INFO: Processing pre-safe-import-module hook 'hook-six.moves.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+96728 INFO: Processing pre-safe-import-module hook 'hook-gi.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+96741 INFO: Processing standard module hook 'hook-certifi.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+98765 INFO: Processing standard module hook 'hook-openpyxl.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+99453 INFO: Processing standard module hook 'hook-lxml.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+100084 INFO: Processing standard module hook 'hook-lxml.etree.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+102801 INFO: Processing standard module hook 'hook-sqlite3.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+103432 INFO: Processing standard module hook 'hook-pandas.io.clipboard.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+103656 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+104690 INFO: Processing standard module hook 'hook-docx.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+106019 INFO: Processing pre-safe-import-module hook 'hook-win32com.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\pre_safe_import_module'
+106195 INFO: Processing standard module hook 'hook-win32com.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+106197 INFO: Processing standard module hook 'hook-pythoncom.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+106386 INFO: Processing standard module hook 'hook-pywintypes.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+107858 INFO: Processing standard module hook 'hook-lark.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\lark\\__pyinstaller'
+108688 INFO: Analyzing hidden import 'openpyxl.compat.abc'
+108691 INFO: Analyzing hidden import 'openpyxl.compat.product'
+108694 INFO: Analyzing hidden import 'openpyxl.compat.singleton'
+108698 INFO: Analyzing hidden import 'openpyxl.descriptors.slots'
+108702 INFO: Analyzing hidden import 'openpyxl.packaging.interface'
+108706 INFO: Analyzing hidden import 'openpyxl.utils.dataframe'
+108714 INFO: Analyzing hidden import 'openpyxl.utils.inference'
+108718 INFO: Analyzing hidden import 'openpyxl.worksheet.cell_watch'
+108720 INFO: Analyzing hidden import 'openpyxl.worksheet.controls'
+108737 INFO: Analyzing hidden import 'openpyxl.worksheet.custom'
+108740 INFO: Analyzing hidden import 'openpyxl.worksheet.errors'
+108746 INFO: Analyzing hidden import 'openpyxl.worksheet.picture'
+108746 INFO: Analyzing hidden import 'openpyxl.worksheet.smart_tag'
+108755 INFO: Analyzing hidden import 'ifcopenshell.api.aggregate'
+109163 INFO: Processing standard module hook 'hook-shapely.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+110473 INFO: Analyzing hidden import 'ifcopenshell.api.alignment'
+110833 INFO: Analyzing hidden import 'ifcopenshell.api.attribute'
+110840 INFO: Analyzing hidden import 'ifcopenshell.api.classification'
+110950 INFO: Analyzing hidden import 'ifcopenshell.api.cogo'
+110963 INFO: Analyzing hidden import 'ifcopenshell.api.constraint'
+110994 INFO: Analyzing hidden import 'ifcopenshell.api.control'
+111006 INFO: Analyzing hidden import 'ifcopenshell.api.cost'
+111541 INFO: Processing standard module hook 'hook-urllib3.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+111705 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+111707 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.backports'!
+111715 INFO: Processing standard module hook 'hook-setuptools.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+111746 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+111790 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+111792 INFO: Setuptools: 'jaraco' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco'!
+111812 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+111814 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.more_itertools'!
+112039 INFO: Processing standard module hook 'hook-_osx_support.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+112475 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+112479 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+113390 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+113391 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+114246 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+114247 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+115214 INFO: Analyzing hidden import 'ifcopenshell.api.document'
+115234 INFO: Analyzing hidden import 'ifcopenshell.api.drawing'
+115250 INFO: Analyzing hidden import 'ifcopenshell.api.layer'
+115259 INFO: Analyzing hidden import 'ifcopenshell.api.library'
+115284 INFO: Analyzing hidden import 'ifcopenshell.api.profile'
+115301 INFO: Analyzing hidden import 'ifcopenshell.api.pset_template'
+115317 INFO: Analyzing hidden import 'ifcopenshell.api.structural'
+115371 INFO: Analyzing hidden import 'ifcopenshell.draw'
+115474 INFO: Analyzing hidden import 'ifcopenshell.express.bootstrap'
+115487 INFO: Analyzing hidden import 'ifcopenshell.express.codegen'
+115494 INFO: Analyzing hidden import 'ifcopenshell.express.definitions'
+115494 INFO: Analyzing hidden import 'ifcopenshell.express.documentation'
+115511 INFO: Analyzing hidden import 'ifcopenshell.express.express_parser'
+115610 INFO: Analyzing hidden import 'ifcopenshell.express.header'
+115629 INFO: Analyzing hidden import 'ifcopenshell.express.implementation'
+115654 INFO: Analyzing hidden import 'ifcopenshell.express.mapping'
+115747 INFO: Analyzing hidden import 'ifcopenshell.express.rule_compiler'
+115816 INFO: Analyzing hidden import 'ifcopenshell.express.rule_executor'
+115967 INFO: Analyzing hidden import 'ifcopenshell.express.rules'
+115967 INFO: Analyzing hidden import 'ifcopenshell.express.rules.IFC2X3'
+116543 INFO: Analyzing hidden import 'ifcopenshell.express.rules.IFC4'
+117465 INFO: Analyzing hidden import 'ifcopenshell.express.rules.IFC4X1'
+118373 INFO: Analyzing hidden import 'ifcopenshell.express.rules.IFC4X2'
+119325 INFO: Analyzing hidden import 'ifcopenshell.express.rules.IFC4X3'
+120358 INFO: Analyzing hidden import 'ifcopenshell.express.rules.IFC4X3_ADD1'
+121454 INFO: Analyzing hidden import 'ifcopenshell.express.rules.IFC4X3_ADD2'
+122550 INFO: Analyzing hidden import 'ifcopenshell.express.rules.IFC4X3_RC1'
+123565 INFO: Analyzing hidden import 'ifcopenshell.express.rules.IFC4X3_RC2'
+124593 INFO: Analyzing hidden import 'ifcopenshell.express.rules.IFC4X3_RC3'
+125625 INFO: Analyzing hidden import 'ifcopenshell.express.rules.IFC4X3_RC4'
+126788 INFO: Analyzing hidden import 'ifcopenshell.express.rules.IFC4X3_TC1'
+127831 INFO: Analyzing hidden import 'ifcopenshell.geom.app'
+127884 INFO: Analyzing hidden import 'ifcopenshell.geom.stats'
+127901 INFO: Analyzing hidden import 'ifcopenshell.mvd'
+127924 INFO: Analyzing hidden import 'ifcopenshell.mvd.__main__'
+127960 INFO: Analyzing hidden import 'ifcopenshell.mvd.mvd'
+127986 INFO: Analyzing hidden import 'ifcopenshell.simple_spf.__main__'
+127991 INFO: Analyzing hidden import 'ifcopenshell.simple_spf.ifcgraph'
+128001 INFO: Analyzing hidden import 'ifcopenshell.simple_spf.test_parser'
+128016 INFO: Analyzing hidden import 'ifcopenshell.template'
+128020 INFO: Analyzing hidden import 'ifcopenshell.util.brick'
+128025 INFO: Analyzing hidden import 'ifcopenshell.util.file'
+128032 INFO: Analyzing hidden import 'ifcopenshell.util.fm'
+128039 INFO: Analyzing hidden import 'ifcopenshell.util.generate_pset_templates'
+128057 INFO: Analyzing hidden import 'ifcopenshell.util.ifc4x3dev_scrape_data_for_docs'
+128072 INFO: Analyzing hidden import 'ifcopenshell.util.profiler'
+128074 INFO: Processing module hooks (post-graph stage)...
+128448 INFO: Processing standard module hook 'hook-lxml.isoschematron.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+128657 INFO: Processing standard module hook 'hook-matplotlib.backends.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+128657 INFO: Matplotlib backend selection method: automatic discovery of used backends
+128697 INFO: Discovered Matplotlib backend(s) via `matplotlib.use()` call in module 'engine.sketch': ['Agg']
+128697 INFO: The following Matplotlib backends were discovered by scanning for `matplotlib.use()` calls: ['Agg']. If your backend of choice is not in this list, either add a `matplotlib.use()` call to your code, or configure the backend collection via hook options (see: https://pyinstaller.org/en/stable/hooks-config.html#matplotlib-hooks).
+129421 INFO: Selected matplotlib backends: ['Agg']
+129421 INFO: Extra dists for selected matplotlib backends: []
+130164 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+130369 INFO: Processing standard module hook 'hook-lxml.objectify.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+130375 INFO: Processing standard module hook 'hook-tzdata.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+132165 INFO: Performing binary vs. data reclassification (1707 entries)
+133125 INFO: Looking for ctypes DLLs
+133249 INFO: Analyzing run-time hooks ...
+133266 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+133271 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+133276 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+133276 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+133276 INFO: Including run-time hook 'pyi_rth_mplconfig.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+133276 INFO: Processing pre-find-module-path hook 'hook-_pyi_rth_utils.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+133292 INFO: Processing standard module hook 'hook-_pyi_rth_utils.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+133305 INFO: Including run-time hook 'pyi_rth_pywintypes.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+133306 INFO: Including run-time hook 'pyi_rth_pythoncom.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+133308 INFO: Including run-time hook 'pyi_rth_pyside6.py' from 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+133427 INFO: Creating base_library.zip...
+133475 INFO: Looking for dynamic libraries
+Note: API not available due to missing dependencies: sequence.recalculate_schedule - No module named 'networkx'
+139708 INFO: Extra DLL search directories (AddDllDirectory): ['C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\shiboken6', 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\numpy.libs', 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\shapely.libs', 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\pandas.libs', 'C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\pyarrow.libs']
+139708 INFO: Extra DLL search directories (PATH): ['C:\\Users\\pro\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PySide6']
+150361 INFO: Warnings written to C:\Users\pro\AppData\Local\Temp\pyi_work\sem\SemellesRPA2024\warn-SemellesRPA2024.txt
+150674 INFO: Graph cross-reference written to C:\Users\pro\AppData\Local\Temp\pyi_work\sem\SemellesRPA2024\xref-SemellesRPA2024.html
+150825 INFO: checking PYZ
+150945 INFO: Building because C:\Users\pro\Desktop\GCSTRUCTFLOW\ISOLATED_FOOTINGS\engine\xl_export.py changed
+150945 INFO: Building PYZ (ZlibArchive) C:\Users\pro\AppData\Local\Temp\pyi_work\sem\SemellesRPA2024\PYZ-00.pyz
+153901 INFO: Building PYZ (ZlibArchive) C:\Users\pro\AppData\Local\Temp\pyi_work\sem\SemellesRPA2024\PYZ-00.pyz completed successfully.
+153992 INFO: checking PKG
+154009 INFO: Building because C:\Users\pro\AppData\Local\Temp\pyi_work\sem\SemellesRPA2024\PYZ-00.pyz changed
+154009 INFO: Building PKG (CArchive) SemellesRPA2024.pkg
+154151 INFO: Building PKG (CArchive) SemellesRPA2024.pkg completed successfully.
+154153 INFO: Bootloader C:\Users\pro\AppData\Local\Programs\Python\Python312\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+154153 INFO: checking EXE
+154170 INFO: Rebuilding EXE-00.toc because pkg is more recent
+154170 INFO: Building EXE from EXE-00.toc
+154174 INFO: Copying bootloader EXE to C:\Users\pro\AppData\Local\Temp\pyi_work\sem\SemellesRPA2024\SemellesRPA2024.exe
+154266 INFO: Copying icon to EXE
+154322 INFO: Copying 0 resources to EXE
+154322 INFO: Embedding manifest in EXE
+154386 INFO: Appending PKG archive to EXE
+154547 INFO: Fixing EXE headers
+155061 INFO: Building EXE from EXE-00.toc completed successfully.
+155083 INFO: checking COLLECT
+155139 INFO: Removing dir C:\Users\pro\Desktop\GCSTRUCTFLOW\ISOLATED_FOOTINGS\dist\SemellesRPA2024
+155925 INFO: Building COLLECT COLLECT-00.toc
+164826 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+164926 INFO: Build complete! The results are available in: C:\Users\pro\Desktop\GCSTRUCTFLOW\ISOLATED_FOOTINGS\dist

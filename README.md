@@ -1,37 +1,42 @@
-﻿# StructFlow
+# Semelles isolées – Hangar métallique (RPA 2024)
 
-pyRevit extension for Revit 2027: concrete beam reinforcement and detailing.
+Windows desktop app (PySide6) that sizes and reinforces isolated footings with an RC pedestal under steel
+columns, and writes a full French **note de calcul (.docx)**. Every formula is shown symbolically, then with
+numbers substituted, then the result, the code article and a VÉRIFIÉE / NON VÉRIFIÉE verdict.
 
-## Install
+## Run
+- **Compiled app:** `dist\SemellesRPA2024\SemellesRPA2024.exe` (copy the whole `SemellesRPA2024` folder to share it).
+- **From source:** double-click `Lancer.bat`, or `pip install -r requirements.txt` then `python semelles_app.py`.
+- **Rebuild the exe:** `build_exe.bat`.
+- The previous browser version is frozen in `legacy_web/` (`legacy_web\Lancer.bat`).
 
-Clone into your pyRevit extensions folder, then click **pyRevit â†’ Reload** in Revit:
+## Workflow (tabs)
+1. **Projet** – identification, RPA 2024 zone (0–VI), site (S1–S4), importance group (1A/1B/2/3) → A, I, S filled
+   automatically (values as in RPA 2024 Integrator); R and Q_F per direction → Ω = R/Q_F; code per check.
+2. **Matériaux** – fc28, fe, fissuration, enrobage; γb = 1.20 / γs = 1.00 in seismic situation (§7.3.2).
+3. **Sol** – σadm / (c, φ, γ) / pressiomètre / pénétromètre; Fs = 2.0 under seismic combos (§10.1.4); φ', c' for sliding.
+4. **Efforts** – **🔗 Importer depuis Robot**: reads the open Robot model directly (read-only, COM API): supports,
+   simple cases with their nature (G/Q/W/S/E), Robot ELU/ELS combinations with their factors, reactions.
+   Or import ETABS / Robot tables (Excel/CSV), or type/paste (Ctrl+V). "Regroupement auto" splits supports into
+   n footing types by load level.
+5. **Combinaisons** – matrix *combination × your load cases*. "Générer" proposes BAEL/CCM 97
+   — seismic per RPA 2024 for isolated footings: G + ψQ ± Ω(Ex ± 0.3Ey), G + ψQ ± Ω(0.3Ex ± Ey).
+   Every factor is editable, rows can be added/removed.
+6. **Semelles** – pedestal, base plate, pinned/fixed, optional imposed A, B, h, D.
+7. **Longrines** – F = ±α·(A·I·S)·N ≥ 20 kN, α = 0.3/0.4/0.6 (S2/S3/S4), min 25×30 / 30×30, 0.6 %.
+8. **Options** – safety factors, bar limits, pedestal ρmin and spacing (auto from zone, §7.4).
+9. **Résultats & note** – summary, drawing, details, Word export. Projects save/open as `.json`.
 
+## RPA 2024 coverage
+Checked against the supplied PDF: §7.2, §7.3.2, §7.4, §10.1.1, §10.1.4, §10.1.5.
+**Not in the supplied PDF (chapters III–V, printed pages 42–94):** seismic combinations §5.2,
+overturning / foundation stability §4.5.1 / §5.7, tables of A, I, S. These are user inputs or marked
+"(à confirmer)" in the note — references live in `engine/references.py`. A, I, S and the isolated-footing seismic
+combination follow RPA 2024 Integrator v4.8.3.
+
+## Tests
 ```
-git clone https://github.com/aminoulogie/STRUCTFLOW.git "%APPDATA%\pyRevit\Extensions\StructFlow.extension"
+python tests/example.py        # engine + Word note → tests/out/exemple.docx
+python tests/test_desktop.py   # headless desktop app test
+python tests/test_robot_live.py  # live test against the open Robot model (read-only)
 ```
-
-## Tools
-
-**Rebar panel**
-- **Beam Rebar**: top / bottom bars (BS 8666 shapes 00, 11, 21) with covers, A/C legs, optional side-to-side bars through the end supports, laps at 50d/60d in automatic or client-given splice zones, supplier stock length, and links (shape 51) that stop at main beams and columns.
-- **Adjust Rebar**: change A / C legs, bar counts, bar types, covers, laps, stock, link spacing or "side to side" on beams that already have bars; empty fields keep each beam's value.
-- **Move Splice**: pick a bar by its lap and click the new position; the lap stays exactly lap factor x d and the position is remembered by Rebuild.
-- **Rebuild Rebar**: regenerates the bars from the settings stored on each beam (after moving or resizing beams).
-- **Link Display**: show all / first-middle-last / 3 in the middle in the active view.
-- **Link Map**: colours beams in the active view: green = links non-stop, orange = links stop at junctions.
-- **Diagnose**: tests every rebar creation method on one beam and reports what Revit accepts (changes nothing).
-
-**Families panel**
-- **Type Maker**: many sizes at once: column / beam types from a list like 300x300, 300x400 (any width / depth parameters), floor types from total thicknesses like 150, 200.
-- **Export Families**: save chosen loaded families (title blocks, tags, columns...) as .rfa into a folder, optionally one subfolder per category.
-
-**Views panel**
-- **Beam Sheets**: places each beam's long section and its cross sections in a row on your title block, filling sheets top to bottom.
-- **Beam Views**: long section + cross sections (start / mid / end of each span) with chosen section type, view templates, scales and tags. Names like A-A, B-B for long sections and A1-A1, A2-A2 for cross sections. Setups can be saved per client.
-
-All lengths in the dialogs are millimetres.
-
-## Status
-
-Early version, tested on Revit 2027. Rebar tagging in generated views is still being debugged.
-

@@ -1,0 +1,32 @@
+import os, sys, time
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from PySide6.QtWidgets import QApplication, QMessageBox, QFileDialog
+QMessageBox.critical = lambda *a, **k: print("CRITICAL", a[1:])
+QMessageBox.warning = lambda *a, **k: print("WARNING", a[1:])
+QMessageBox.information = lambda *a, **k: print("INFO", a[1:])
+QMessageBox.question = lambda *a, **k: QMessageBox.Yes
+OUT = os.path.abspath("tests/out")
+import etabsflow, robotflow
+robotflow.os.startfile = lambda p: print("would open", p)
+QFileDialog.getSaveFileName = staticmethod(lambda *a, **k: (os.path.join(OUT, {"Excel": "res.xlsx", "Word": "res.docx", "Réactions": "reac.xlsx"}.get(a[1], "model.edb")), ""))
+app = QApplication([])
+w = etabsflow.EMain()
+t0 = time.time()
+w.script.setPlainText(robotflow.SCRIPT_EXAMPLE.replace('# wall("C1", "D1", 0.20)', 'wall("C1", "D1", 0.20)'))
+w.run_script()
+w.new_project()
+w.create_model()
+w.create_cases_and_loads()
+w.e_modes.setValue(12)
+w.create_seismic()
+w.create_combos()
+w.calculate()
+w.read_modal()
+for m in w.modal[:3]: print("mode", [round(x, 3) for x in m])
+w.read_results()
+print("nu", [(x["bar"], round(x["nu"], 3)) for x in w.nu_rows[:4]])
+w.export_excel(); w.export_word()
+w.check_soil(); w.export_reactions()
+print(w.logbox.toPlainText())
+print("total", round(time.time() - t0, 1))
